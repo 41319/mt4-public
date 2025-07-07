@@ -26,7 +26,7 @@ datetime lastCheckDate = 0;
 //+------------------------------------------------------------------+
 int OnInit() {
 
-
+   CalculateClosedVolumeThisMonth();
    return(INIT_SUCCEEDED);
 
 }
@@ -43,7 +43,7 @@ void OnDeinit(const int reason) {
 //+------------------------------------------------------------------+
 void OnTick() {
 
-      bool isNewDay = TimeDay(TimeCurrent()) != TimeDay(lastCheckDate);
+   bool isNewDay = TimeDay(TimeCurrent()) != TimeDay(lastCheckDate);
    RunDailyChecks(isNewDay);
    
 }
@@ -106,7 +106,7 @@ void OnOrderClose(const int ticket, const int magic_number, const double lots, c
 //+------------------------------------------------------------------+
 void RunDailyChecks(bool isNewDay) {
    if (isNewDay) {
-      double monthlyVolume = CalculateClosedVolumeThisMonth();
+      CalculateClosedVolumeThisMonth();
       double openingPrice = iOpen(Symbol(), PERIOD_D1, 0);
       Print("New day detected. Daily opening price: ", openingPrice);
 
@@ -174,6 +174,6 @@ double CalculateClosedVolumeThisMonth()
             }
         }
     }
-    
+    Print("Monthly Volume", totalVolume);
     return totalVolume;
 }
