@@ -20,15 +20,16 @@ input bool UsePercentage = false;
 int ticket = -1;
 double priceLevels[];
 datetime lastCheckDate = 0;
+double monthlyVolume = 0;
+bool needUpdateLevels = false;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit() {
-
    CalculateClosedVolumeThisMonth();
+   UpdatePriceLevels();
    return(INIT_SUCCEEDED);
-
 }
 
 //+------------------------------------------------------------------+
@@ -42,10 +43,28 @@ void OnDeinit(const int reason) {
 //| Expert tick function                                             |
 //+------------------------------------------------------------------+
 void OnTick() {
-
    bool isNewDay = TimeDay(TimeCurrent()) != TimeDay(lastCheckDate);
-   RunDailyChecks(isNewDay);
    
+   if (isNewDay) {
+      monthlyVolume = CalculateClosedVolumeThisMonth();
+      Print("New day detected. Monthly volume so far: ", monthlyVolume);
+      lastCheckDate = TimeCurrent();
+   }
+   
+   if (needUpdateLevels || isNewDay) {
+      UpdatePriceLevels();
+      CloseAllPendingOrders();
+      needUpdateLevels = false;
+   }
+   
+   ManageOrders();
+}
+
+//+------------------------------------------------------------------+
+//| Handle order close event                                         |
+//+------------------------------------------------------------------+
+void OnTrade() {
+   needUpdateLevels = true;
 }
 
 //+------------------------------------------------------------------+
@@ -55,7 +74,7 @@ int CountOrders() {
    int count = 0;
    for (int i = 0; i < OrdersTotal(); i++) {
       if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
-         if (OrderSymbol() == Symbol()) {
+         if (OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber) {
             count++;
          }
       }
@@ -67,12 +86,10 @@ int CountOrders() {
 //| Place a pending Buy Limit order                                  |
 //+------------------------------------------------------------------+
 void PlaceOrder(int index) {
-
-
    double point = MarketInfo(Symbol(), MODE_POINT);
    int digits = MarketInfo(Symbol(), MODE_DIGITS);
    double triggerPrice = priceLevels[index];
-   double takeProfitPrice = priceLevels[index] + TakeProfitPoints; //50;// NormalizeDouble(triggerPrice + TakeProfitPoints * point, digits);
+   double takeProfitPrice = NormalizeDouble(triggerPrice + TakeProfitPoints * point, digits);
    datetime expiryTime = TimeCurrent() + 86400; // 24 hours later
 
    // Safety check: triggerPrice must be below current Ask for BuyLimit
@@ -93,43 +110,11 @@ void PlaceOrder(int index) {
 }
 
 //+------------------------------------------------------------------+
-//| Handle closed orders (currently unused)                          |
+//| Manage all orders - create new ones if needed                    |
 //+------------------------------------------------------------------+
-void OnOrderClose(const int ticket, const int magic_number, const double lots, const datetime close_time, const double close_price) {
-   if (magic_number == MagicNumber) {
-      Print("Order closed. Ticket #", ticket, " @ ", close_price);
-   }
-}
-
-//+------------------------------------------------------------------+
-//| Run daily logic and recreate missing orders                      |
-//+------------------------------------------------------------------+
-void RunDailyChecks(bool isNewDay) {
-   if (isNewDay) {
-      CalculateClosedVolumeThisMonth();
-      double openingPrice = iOpen(Symbol(), PERIOD_D1, 0);
-      Print("New day detected. Daily opening price: ", openingPrice);
-
-      ArrayResize(priceLevels, MaxOrders);
-      for (int i = 0; i < MaxOrders; i++) {
-         if (UsePercentage) {
-            priceLevels[i] = openingPrice * (1 - (PriceLevelAdjustment / 100.0) * (i + 1));
-         } else {
-            priceLevels[i] = openingPrice - (PriceLevelAdjustment * (i + 1));
-         }
-         
-         Print(priceLevels[i]);
-      }
-      
-      lastCheckDate = TimeCurrent();
-      Print(monthlyVolume)
-   }
-
+void ManageOrders() {
    int count = CountOrders();
-   if (count > 0) {
-      Print("Open orders/positions: ", count);
-   }
-
+   
    for (int i = 0; i < MaxOrders; i++) {
       bool orderExists = false;
       for (int j = 0; j < OrdersTotal(); j++) {
@@ -150,10 +135,44 @@ void RunDailyChecks(bool isNewDay) {
 }
 
 //+------------------------------------------------------------------+
+//| Update price levels based on current market price                |
+//+------------------------------------------------------------------+
+void UpdatePriceLevels() {
+   double currentPrice = MarketInfo(Symbol(), MODE_BID); // Using BID price for calculations
+   ArrayResize(priceLevels, MaxOrders);
+   
+   for (int i = 0; i < MaxOrders; i++) {
+      if (UsePercentage) {
+         priceLevels[i] = currentPrice * (1 - (PriceLevelAdjustment / 100.0) * (i + 1));
+      } else {
+         priceLevels[i] = NormalizeDouble(currentPrice - (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT), MarketInfo(Symbol(), MODE_DIGITS));
+      }
+      Print("Price Level ", i+1, ": ", priceLevels[i]);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Close all pending orders                                         |
+//+------------------------------------------------------------------+
+void CloseAllPendingOrders() {
+   for (int i = OrdersTotal()-1; i >= 0; i--) {
+      if (OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) {
+         if (OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_BUYLIMIT) {
+            bool result = OrderDelete(OrderTicket());
+            if (result) {
+               Print("Pending order deleted. Ticket #", OrderTicket());
+            } else {
+               Print("Failed to delete order. Ticket #", OrderTicket(), " Error: ", GetLastError());
+            }
+         }
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
 //| Function to calculate closed order volume for the current month  |
 //+------------------------------------------------------------------+
-double CalculateClosedVolumeThisMonth()
-{
+double CalculateClosedVolumeThisMonth() {
     double totalVolume = 0.0;
     datetime currentTime = TimeCurrent();
     int currentMonth = TimeMonth(currentTime);
@@ -163,17 +182,13 @@ double CalculateClosedVolumeThisMonth()
     datetime monthStart = StrToTime(StringFormat("%d.%02d.01 00:00", currentYear, currentMonth));
     
     // Loop through closed orders in history
-    for(int i = OrdersHistoryTotal()-1; i >= 0; i--)
-    {
-        if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
-        {
-            // Check if order was closed this month
-            if(OrderCloseTime() >= monthStart && OrderCloseTime() <= currentTime)
-            {
+    for(int i = OrdersHistoryTotal()-1; i >= 0; i--) {
+        if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) {
+            // Check if order was closed this month and has our magic number
+            if(OrderCloseTime() >= monthStart && OrderCloseTime() <= currentTime && OrderMagicNumber() == MagicNumber) {
                 totalVolume += OrderLots();
             }
         }
     }
-    Print("Monthly Volume", totalVolume);
     return totalVolume;
 }
