@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Your Name"
 #property link      "https://www.yourwebsite.com"
-#property version   "1.07"
+#property version   "1.10"
 #property strict
 
 // Input parameters
@@ -17,6 +17,7 @@ input int MagicNumber = 12345;
 input double PriceLevelAdjustment = 100 * 10;
 input bool UsePercentage = false;
 input int OrderExpirationHours = 24;         // Pending order expiration
+input double GapThresholdPoints = 200 * 10; // Points above highest level to trigger recalculation
 
 // Global variables
 double priceLevels[];
@@ -56,7 +57,8 @@ void OnTick()
       lastCheckDate = TimeCurrent();
    }
    
-   if(needUpdateLevels || isNewDay)
+   // Check if price has moved beyond our highest level + gap threshold
+   if(CheckPriceGap() || needUpdateLevels || isNewDay)
    {
       UpdatePriceLevels();
       CloseAllPendingOrders();
@@ -65,6 +67,25 @@ void OnTick()
    
    ManageOrders();
    CheckForTrailingStop();
+}
+
+//+------------------------------------------------------------------+
+//| Check if current price exceeds highest level by gap threshold    |
+//+------------------------------------------------------------------+
+bool CheckPriceGap()
+{
+   if(ArraySize(priceLevels) == 0) return false;
+   
+   double highestLevel = priceLevels[ArrayMaximum(priceLevels)];
+   double currentPrice = MarketInfo(Symbol(), MODE_BID);
+   double gapThreshold = GapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
+   
+   if(currentPrice > highestLevel + gapThreshold)
+   {
+      Print("Price gap detected (", currentPrice, " > ", highestLevel, " + ", gapThreshold, "). Recalculating levels.");
+      return true;
+   }
+   return false;
 }
 
 //+------------------------------------------------------------------+
