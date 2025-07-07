@@ -106,6 +106,7 @@ void OnOrderClose(const int ticket, const int magic_number, const double lots, c
 //+------------------------------------------------------------------+
 void RunDailyChecks(bool isNewDay) {
    if (isNewDay) {
+      double monthlyVolume = CalculateClosedVolumeThisMonth();
       double openingPrice = iOpen(Symbol(), PERIOD_D1, 0);
       Print("New day detected. Daily opening price: ", openingPrice);
 
@@ -121,6 +122,7 @@ void RunDailyChecks(bool isNewDay) {
       }
       
       lastCheckDate = TimeCurrent();
+      Print(monthlyVolume)
    }
 
    int count = CountOrders();
@@ -145,4 +147,33 @@ void RunDailyChecks(bool isNewDay) {
          count++;
       }
    }
+}
+
+//+------------------------------------------------------------------+
+//| Function to calculate closed order volume for the current month  |
+//+------------------------------------------------------------------+
+double CalculateClosedVolumeThisMonth()
+{
+    double totalVolume = 0.0;
+    datetime currentTime = TimeCurrent();
+    int currentMonth = TimeMonth(currentTime);
+    int currentYear = TimeYear(currentTime);
+    
+    // Calculate the start of the month
+    datetime monthStart = StrToTime(StringFormat("%d.%02d.01 00:00", currentYear, currentMonth));
+    
+    // Loop through closed orders in history
+    for(int i = OrdersHistoryTotal()-1; i >= 0; i--)
+    {
+        if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
+        {
+            // Check if order was closed this month
+            if(OrderCloseTime() >= monthStart && OrderCloseTime() <= currentTime)
+            {
+                totalVolume += OrderLots();
+            }
+        }
+    }
+    
+    return totalVolume;
 }
