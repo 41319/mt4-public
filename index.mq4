@@ -10,10 +10,10 @@
 
 // Input parameters
 input double LotSize = 0.01;
-input int TakeProfitPoints = 50 * 100;
+input int TakeProfitPoints = 50 * 10;
 input int MaxOrders = 3;
 input int MagicNumber = 12345;
-input double PriceLevelAdjustment = 100;
+input double PriceLevelAdjustment = 100 * 10;
 input bool UsePercentage = false;
 
 // Global variables
