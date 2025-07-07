@@ -23,7 +23,7 @@ input double GapThresholdPoints =  51 * 10; // Points above highest level to tri
 double priceLevels[];
 datetime lastCheckDate = 0;
 double monthlyVolume = 0;
-bool needUpdateLevels = false;
+
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -58,11 +58,11 @@ void OnTick()
    }
    
    // Check if price has moved beyond our highest level + gap threshold
-   if(CheckPriceGap() || needUpdateLevels || isNewDay)
+   if(CheckPriceGap() || isNewDay)
    {
       UpdatePriceLevels();
       CloseAllPendingOrders();
-      needUpdateLevels = false;
+
    }
    
    ManageOrders();
@@ -80,7 +80,7 @@ bool CheckPriceGap()
    double currentPrice = MarketInfo(Symbol(), MODE_BID);
    double gapThreshold = GapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
    
-   if(currentPrice > highestLevel + gapThreshold)
+   if(currentPrice > (highestLevel + gapThreshold))
    {
       Print("Price gap detected (", currentPrice, " > ", highestLevel, " + ", gapThreshold, "). Recalculating levels.");
       return true;
@@ -88,13 +88,6 @@ bool CheckPriceGap()
    return false;
 }
 
-//+------------------------------------------------------------------+
-//| Handle order close event                                         |
-//+------------------------------------------------------------------+
-void OnTrade()
-{
-   needUpdateLevels = true;
-}
 
 //+------------------------------------------------------------------+
 //| Count existing orders with matching symbol and magic             |
