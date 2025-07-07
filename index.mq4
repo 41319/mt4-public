@@ -10,7 +10,7 @@
 
 // Input parameters
 input double LotSize = 0.01;
-input int TakeProfitPoints = 50;
+input int TakeProfitPoints = 50 * 100;
 input int MaxOrders = 3;
 input int MagicNumber = 12345;
 input double PriceLevelAdjustment = 100;
