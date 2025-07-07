@@ -5,19 +5,20 @@
 //+------------------------------------------------------------------+
 #property copyright "Your Name"
 #property link      "https://www.yourwebsite.com"
-#property version   "1.01"
+#property version   "1.07"
 #property strict
 
 // Input parameters
 input double LotSize = 0.01;
-input int TakeProfitPoints = 50 * 10;
+input int TrailingStopPoints = 30 * 10;      // Only activates in profit
+input int BreakevenTriggerPoints = 50 * 10;  // Profit level to activate stop
 input int MaxOrders = 3;
 input int MagicNumber = 12345;
 input double PriceLevelAdjustment = 100 * 10;
 input bool UsePercentage = false;
+input int OrderExpirationHours = 24;         // Pending order expiration
 
 // Global variables
-int ticket = -1;
 double priceLevels[];
 datetime lastCheckDate = 0;
 double monthlyVolume = 0;
@@ -63,6 +64,7 @@ void OnTick()
    }
    
    ManageOrders();
+   CheckForTrailingStop();
 }
 
 //+------------------------------------------------------------------+
@@ -100,28 +102,22 @@ void PlaceOrder(int index)
    double point = MarketInfo(Symbol(), MODE_POINT);
    int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
    double triggerPrice = priceLevels[index];
-   double takeProfitPrice = NormalizeDouble(triggerPrice + TakeProfitPoints * point, digits);
-   datetime expiryTime = TimeCurrent() + 86400; // 24 hours later
+   datetime expiryTime = TimeCurrent() + OrderExpirationHours * 3600;
 
-   // Safety check: triggerPrice must be below current Ask for BuyLimit
+   // Safety checks
    if(triggerPrice >= MarketInfo(Symbol(), MODE_ASK))
    {
-      Print("Trigger price is too high for BuyLimit. Skipping. Trigger: ", triggerPrice, " >= Ask: ", MarketInfo(Symbol(), MODE_ASK));
+      Print("Trigger price too high. Skipping. Trigger: ", triggerPrice, " >= Ask: ", MarketInfo(Symbol(), MODE_ASK));
       return;
    }
 
-   Print(Symbol(), " | Attempting BUYLIMIT | Price: ", triggerPrice, ", TP: ", takeProfitPrice);
-   ticket = OrderSend(Symbol(), OP_BUYLIMIT, LotSize, triggerPrice, 3, 0, takeProfitPrice, "HKIndex EA", MagicNumber, expiryTime, clrGreen);
+   Print("Attempting BUYLIMIT @ ", triggerPrice);
+   int ticket = OrderSend(Symbol(), OP_BUYLIMIT, LotSize, triggerPrice, 3, 0, 0, "HKIndex EA", MagicNumber, expiryTime, clrGreen);
 
    if(ticket < 0)
-   {
-      int errorCode = GetLastError();
-      Print("OrderSend failed with error #", errorCode);
-   }
+      Print("OrderSend failed. Error: ", GetLastError());
    else
-   {
-      Print("Order placed. Ticket #", ticket, " @ ", triggerPrice, ", TP @ ", takeProfitPrice);
-   }
+      Print("Order placed. Ticket #", ticket);
 }
 
 //+------------------------------------------------------------------+
@@ -160,7 +156,7 @@ void ManageOrders()
 //+------------------------------------------------------------------+
 void UpdatePriceLevels()
 {
-   double currentPrice = MarketInfo(Symbol(), MODE_BID); // Using BID price for calculations
+   double currentPrice = MarketInfo(Symbol(), MODE_BID);
    ArrayResize(priceLevels, MaxOrders);
    
    for(int i = 0; i < MaxOrders; i++)
@@ -189,43 +185,63 @@ void CloseAllPendingOrders()
          if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_BUYLIMIT)
          {
             bool result = OrderDelete(OrderTicket());
-            if(result)
-            {
-               Print("Pending order deleted. Ticket #", OrderTicket());
-            }
-            else
-            {
-               Print("Failed to delete order. Ticket #", OrderTicket(), " Error: ", GetLastError());
-            }
+            if(!result)
+               Print("Failed to delete order. Error: ", GetLastError());
          }
       }
    }
 }
 
 //+------------------------------------------------------------------+
-//| Function to calculate closed order volume for the current month  |
+//| Calculate closed order volume for current month                  |
 //+------------------------------------------------------------------+
 double CalculateClosedVolumeThisMonth()
 {
-    double totalVolume = 0.0;
-    datetime currentTime = TimeCurrent();
-    int currentMonth = TimeMonth(currentTime);
-    int currentYear = TimeYear(currentTime);
-    
-    // Calculate the start of the month
-    datetime monthStart = StrToTime(StringFormat("%d.%02d.01 00:00", currentYear, currentMonth));
-    
-    // Loop through closed orders in history
-    for(int i = OrdersHistoryTotal()-1; i >= 0; i--)
-    {
-        if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
-        {
-            // Check if order was closed this month and has our magic number
-            if(OrderCloseTime() >= monthStart && OrderCloseTime() <= currentTime && OrderMagicNumber() == MagicNumber)
+   double totalVolume = 0.0;
+   datetime monthStart = iTime(NULL, PERIOD_MN1, 0);
+   
+   for(int i = OrdersHistoryTotal()-1; i >= 0; i--)
+   {
+      if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
+      {
+         if(OrderCloseTime() >= monthStart && OrderMagicNumber() == MagicNumber)
+         {
+            totalVolume += OrderLots();
+         }
+      }
+   }
+   return totalVolume;
+}
+
+//+------------------------------------------------------------------+
+//| Smart Trailing Stop - Only protects profits                      |
+//+------------------------------------------------------------------+
+void CheckForTrailingStop()
+{
+   double point = MarketInfo(Symbol(), MODE_POINT);
+   
+   for(int i = 0; i < OrdersTotal(); i++)
+   {
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+      {
+         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_BUY)
+         {
+            double currentProfit = MarketInfo(Symbol(), MODE_BID) - OrderOpenPrice();
+            double currentStop = OrderStopLoss();
+            
+            // Check if we should activate stop protection
+            if(currentProfit >= BreakevenTriggerPoints * point)
             {
-                totalVolume += OrderLots();
+               double newStop = OrderOpenPrice() + (currentProfit - TrailingStopPoints * point);
+               
+               // Only move stop if it's higher than current stop or no stop set
+               if(currentStop == 0 || newStop > currentStop)
+               {
+                  if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, 0, 0, clrNONE))
+                     Print("Failed to modify stop. Error: ", GetLastError());
+               }
             }
-        }
-    }
-    return totalVolume;
+         }
+      }
+   }
 }
