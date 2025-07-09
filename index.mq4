@@ -17,7 +17,7 @@ input int MagicNumber = 12345;
 input double PriceLevelAdjustment = 50 * 10;
 input bool UsePercentage = false;
 input int OrderExpirationHours = 24;         // Pending order expiration
-input double GapThresholdPoints =  (PriceLevelAdjustment + 1) * 10; // Points above highest level to trigger recalculation
+input double GapThresholdPoints =  51 * 10; // Points above highest level to trigger recalculation
 
 // Global variables
 double priceLevels[];
