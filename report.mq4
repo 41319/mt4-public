@@ -13,8 +13,8 @@ input color LossColor = clrRed;
 input int Corner = 3;               // 1=Top Left, 2=Top Right, 3=Bottom Left, 4=Bottom Right
 input int FontSize = 12;
 input string FontFace = "Arial";
-input int X_Offset = 10;           // Horizontal offset from corner
-input int Y_Offset = 10;           // Vertical offset from corner
+input int X_Offset = 820;           // Horizontal offset from corner
+input int Y_Offset = 20;            // Vertical offset from corner
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                  |
@@ -46,12 +46,16 @@ void OnTimer()
 //+------------------------------------------------------------------+
 //| Calculate profitable/loss positions for current month           |
 //+------------------------------------------------------------------+
-void CountPLPositionsThisMonth(int &profitCount, int &lossCount, double &profitVolume, double &lossVolume)
+void CountPLPositionsThisMonth(int &profitCount, int &lossCount, 
+                              double &profitVolume, double &lossVolume,
+                              double &avgProfitTime, double &avgLossTime)
 {
    profitCount = 0;
    lossCount = 0;
    profitVolume = 0;
    lossVolume = 0;
+   double totalProfitSeconds = 0;
+   double totalLossSeconds = 0;
    
    datetime monthStart = iTime(NULL, PERIOD_MN1, 0);
    datetime now = TimeCurrent();
@@ -67,24 +71,48 @@ void CountPLPositionsThisMonth(int &profitCount, int &lossCount, double &profitV
             (MagicNumber == 0 || OrderMagicNumber() == MagicNumber))
          {
             double profit = OrderProfit() + OrderSwap() + OrderCommission();
+            double duration = OrderCloseTime() - OrderOpenTime();
             
-            if(profit > 0.01) // Profit position (avoid floating point precision issues)
+            if(profit > 0.01) // Profit position
             {
                profitCount++;
                profitVolume += OrderLots();
+               totalProfitSeconds += duration;
             }
             else if(profit < -0.01) // Loss position
             {
                lossCount++;
                lossVolume += OrderLots();
+               totalLossSeconds += duration;
             }
-            // Breakeven trades (where -0.01 <= profit <= 0.01) are ignored
          }
       }
    }
    
+   // Calculate average times
+   avgProfitTime = (profitCount > 0) ? totalProfitSeconds / profitCount : 0;
+   avgLossTime = (lossCount > 0) ? totalLossSeconds / lossCount : 0;
+   
    profitVolume = NormalizeDouble(profitVolume, 2);
    lossVolume = NormalizeDouble(lossVolume, 2);
+}
+
+//+------------------------------------------------------------------+
+//| Format time duration to readable string                         |
+//+------------------------------------------------------------------+
+string FormatDuration(double seconds)
+{
+   if(seconds <= 0) return "N/A";
+   
+   int days = (int)(seconds / 86400);
+   seconds -= days * 86400;
+   int hours = (int)(seconds / 3600);
+   seconds -= hours * 3600;
+   int minutes = (int)(seconds / 60);
+   
+   if(days > 0) return StringFormat("%dd %dh", days, hours);
+   if(hours > 0) return StringFormat("%dh %dm", hours, minutes);
+   return StringFormat("%dm", minutes);
 }
 
 //+------------------------------------------------------------------+
@@ -94,16 +122,17 @@ void UpdateDisplay()
 {
    int profitCount, lossCount;
    double profitVolume, lossVolume;
+   double avgProfitTime, avgLossTime;
    
-   CountPLPositionsThisMonth(profitCount, lossCount, profitVolume, lossVolume);
+   CountPLPositionsThisMonth(profitCount, lossCount, profitVolume, lossVolume, avgProfitTime, avgLossTime);
    string monthName = TimeToStr(iTime(NULL, PERIOD_MN1, 0), TIME_DATE);
    
    string txt = StringFormat("Closed This Month (%s):\n"+
-                            "Profitable: %d trades (%.2f lots)\n"+
-                            "Loss: %d trades (%.2f lots)",
+                            "Profitable: %d trades (%.2f lots) ~ %s avg\n"+
+                            "Loss: %d trades (%.2f lots) ~ %s avg",
                             monthName,
-                            profitCount, profitVolume,
-                            lossCount, lossVolume);
+                            profitCount, profitVolume, FormatDuration(avgProfitTime),
+                            lossCount, lossVolume, FormatDuration(avgLossTime));
    
    // Create or update the label
    if(ObjectFind(0, "PLTM_Label") < 0)
