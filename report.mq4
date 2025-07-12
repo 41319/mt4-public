@@ -4,7 +4,7 @@
 //|                           https://www.forexeathub.com            |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.30"
+#property version   "1.40"
 
 // Display Settings
 input int MagicNumber = 0;          // 0 = all trades, or set your Magic Number
@@ -13,8 +13,9 @@ input color LossColor = clrRed;
 input int Corner = 3;               // 1=Top Left, 2=Top Right, 3=Bottom Left, 4=Bottom Right
 input int FontSize = 12;
 input string FontFace = "Arial";
-input int X_Offset = 820;           // Horizontal offset from corner
+input int X_Offset = 20;            // Horizontal offset from corner
 input int Y_Offset = 20;            // Vertical offset from corner
+input int Line_Spacing = 18;        // Vertical spacing between lines
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                  |
@@ -31,7 +32,7 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-   ObjectsDeleteAll(0, "PLTM_"); // Clean up all our objects
+   CleanUpChart();
    EventKillTimer();
 }
 
@@ -41,6 +42,14 @@ void OnDeinit(const int reason)
 void OnTimer()
 {
    UpdateDisplay();
+}
+
+//+------------------------------------------------------------------+
+//| Remove all our objects from chart                               |
+//+------------------------------------------------------------------+
+void CleanUpChart()
+{
+   ObjectsDeleteAll(0, "PLTM_");
 }
 
 //+------------------------------------------------------------------+
@@ -62,8 +71,9 @@ void CountPLPositionsThisMonth(int &profitCount, int &lossCount,
    datetime now = TimeCurrent();
    
    // To calculate trades per day, we need to track trading days
-   int totalTradingDays = 1; // At least 1 day to avoid division by zero
+   int totalTradingDays = 0;
    int lastProcessedDay = -1;
+   int currentMonth = -1;
    
    for(int i = OrdersHistoryTotal()-1; i >= 0; i--)
    {
@@ -78,12 +88,14 @@ void CountPLPositionsThisMonth(int &profitCount, int &lossCount,
             // Count trading days
             MqlDateTime closeTimeStruct;
             TimeToStruct(OrderCloseTime(), closeTimeStruct);
-            int closeDay = closeTimeStruct.day;
             
-            if(closeDay != lastProcessedDay)
+            if(currentMonth == -1) currentMonth = closeTimeStruct.mon;
+            
+            if(closeTimeStruct.day != lastProcessedDay || closeTimeStruct.mon != currentMonth)
             {
                totalTradingDays++;
-               lastProcessedDay = closeDay;
+               lastProcessedDay = closeTimeStruct.day;
+               currentMonth = closeTimeStruct.mon;
             }
             
             double profit = OrderProfit() + OrderSwap() + OrderCommission();
@@ -141,6 +153,9 @@ string FormatDuration(double seconds)
 //+------------------------------------------------------------------+
 void UpdateDisplay()
 {
+   // First clean up previous objects
+   CleanUpChart();
+   
    int profitCount, lossCount;
    double profitVolume, lossVolume;
    double avgProfitTime, avgLossTime;
@@ -148,36 +163,49 @@ void UpdateDisplay()
    
    CountPLPositionsThisMonth(profitCount, lossCount, profitVolume, lossVolume, 
                            avgProfitTime, avgLossTime, tradesPerDay);
+   
    string monthName = TimeToStr(iTime(NULL, PERIOD_MN1, 0), TIME_DATE);
+   int yPos = Y_Offset;
    
-   string txt = StringFormat("Closed This Month (%s):\n"+
-                            "Profitable: %d trades (%.2f lots) ~ %s avg\n"+
-                            "Loss: %d trades (%.2f lots) ~ %s avg\n"+
-                            "Trades/Day: %.2f",
-                            monthName,
-                            profitCount, profitVolume, FormatDuration(avgProfitTime),
-                            lossCount, lossVolume, FormatDuration(avgLossTime),
-                            tradesPerDay);
+   // Create header
+   CreateLabel("PLTM_Header", StringFormat("Closed Trades This Month (%s)", monthName), 
+              X_Offset, yPos, FontSize, ProfitColor);
+   yPos += Line_Spacing;
    
-   // Create or update the label
-   if(ObjectFind(0, "PLTM_Label") < 0)
-   {
-      ObjectCreate(0, "PLTM_Label", OBJ_LABEL, 0, 0, 0);
-      ObjectSetInteger(0, "PLTM_Label", OBJPROP_CORNER, Corner);
-      ObjectSetInteger(0, "PLTM_Label", OBJPROP_ANCHOR, GetAnchorFromCorner(Corner));
-      ObjectSetInteger(0, "PLTM_Label", OBJPROP_XDISTANCE, X_Offset);
-      ObjectSetInteger(0, "PLTM_Label", OBJPROP_YDISTANCE, Y_Offset);
-      ObjectSetInteger(0, "PLTM_Label", OBJPROP_FONTSIZE, FontSize);
-      ObjectSetString(0, "PLTM_Label", OBJPROP_FONT, FontFace);
-      ObjectSetInteger(0, "PLTM_Label", OBJPROP_BACK, false);
-      ObjectSetInteger(0, "PLTM_Label", OBJPROP_SELECTABLE, false);
-      ObjectSetInteger(0, "PLTM_Label", OBJPROP_HIDDEN, true);
-   }
+   // Create profitable trades line
+   CreateLabel("PLTM_Profit", StringFormat("Profitable: %d trades (%.2f lots) ~ %s avg", 
+              profitCount, profitVolume, FormatDuration(avgProfitTime)), 
+              X_Offset, yPos, FontSize, ProfitColor);
+   yPos += Line_Spacing;
    
-   // Color the text based on net performance
-   color clr = (profitCount > lossCount) ? ProfitColor : LossColor;
-   ObjectSetInteger(0, "PLTM_Label", OBJPROP_COLOR, clr);
-   ObjectSetString(0, "PLTM_Label", OBJPROP_TEXT, txt);
+   // Create loss trades line
+   CreateLabel("PLTM_Loss", StringFormat("Loss: %d trades (%.2f lots) ~ %s avg", 
+              lossCount, lossVolume, FormatDuration(avgLossTime)), 
+              X_Offset, yPos, FontSize, LossColor);
+   yPos += Line_Spacing;
+   
+   // Create trades per day line
+   CreateLabel("PLTM_TradesPerDay", StringFormat("Trades/Day: %.2f", tradesPerDay), 
+              X_Offset, yPos, FontSize, (profitCount > lossCount) ? ProfitColor : LossColor);
+}
+
+//+------------------------------------------------------------------+
+//| Create a label object                                           |
+//+------------------------------------------------------------------+
+void CreateLabel(string name, string text, int x, int y, int size, color clr)
+{
+   ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, Corner);
+   ObjectSetInteger(0, name, OBJPROP_ANCHOR, GetAnchorFromCorner(Corner));
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, size);
+   ObjectSetString(0, name, OBJPROP_FONT, FontFace);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_BACK, false);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+   ObjectSetInteger(0, name, OBJPROP_HIDDEN, true);
 }
 
 //+------------------------------------------------------------------+
