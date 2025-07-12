@@ -13,6 +13,8 @@ input color LossColor = clrRed;
 input int Corner = 3;               // 1=Top Left, 2=Top Right, 3=Bottom Left, 4=Bottom Right
 input int FontSize = 12;
 input string FontFace = "Arial";
+input int X_Offset = 10;           // Horizontal offset from corner
+input int Y_Offset = 10;           // Vertical offset from corner
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                  |
@@ -108,14 +110,33 @@ void UpdateDisplay()
    {
       ObjectCreate(0, "PLTM_Label", OBJ_LABEL, 0, 0, 0);
       ObjectSetInteger(0, "PLTM_Label", OBJPROP_CORNER, Corner);
-      ObjectSetInteger(0, "PLTM_Label", OBJPROP_XDISTANCE, 20);
-      ObjectSetInteger(0, "PLTM_Label", OBJPROP_YDISTANCE, 20);
+      ObjectSetInteger(0, "PLTM_Label", OBJPROP_ANCHOR, GetAnchorFromCorner(Corner));
+      ObjectSetInteger(0, "PLTM_Label", OBJPROP_XDISTANCE, X_Offset);
+      ObjectSetInteger(0, "PLTM_Label", OBJPROP_YDISTANCE, Y_Offset);
       ObjectSetInteger(0, "PLTM_Label", OBJPROP_FONTSIZE, FontSize);
       ObjectSetString(0, "PLTM_Label", OBJPROP_FONT, FontFace);
+      ObjectSetInteger(0, "PLTM_Label", OBJPROP_BACK, false);
+      ObjectSetInteger(0, "PLTM_Label", OBJPROP_SELECTABLE, false);
+      ObjectSetInteger(0, "PLTM_Label", OBJPROP_HIDDEN, true);
    }
-   Print(txt);
+   
    // Color the text based on net performance
    color clr = (profitCount > lossCount) ? ProfitColor : LossColor;
    ObjectSetInteger(0, "PLTM_Label", OBJPROP_COLOR, clr);
    ObjectSetString(0, "PLTM_Label", OBJPROP_TEXT, txt);
+}
+
+//+------------------------------------------------------------------+
+//| Get appropriate anchor point based on corner                     |
+//+------------------------------------------------------------------+
+int GetAnchorFromCorner(int corner)
+{
+   switch(corner)
+   {
+      case 1: return ANCHOR_LEFT_UPPER;    // Top Left
+      case 2: return ANCHOR_RIGHT_UPPER;   // Top Right
+      case 3: return ANCHOR_LEFT_LOWER;    // Bottom Left
+      case 4: return ANCHOR_RIGHT_LOWER;   // Bottom Right
+      default: return ANCHOR_LEFT_LOWER;   // Default to Bottom Left
+   }
 }
