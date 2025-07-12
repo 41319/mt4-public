@@ -4,7 +4,7 @@
 //|                           https://www.forexeathub.com            |
 //+------------------------------------------------------------------+
 #property strict
-#property version   "1.20"
+#property version   "1.30"
 
 // Display Settings
 input int MagicNumber = 0;          // 0 = all trades, or set your Magic Number
@@ -48,7 +48,8 @@ void OnTimer()
 //+------------------------------------------------------------------+
 void CountPLPositionsThisMonth(int &profitCount, int &lossCount, 
                               double &profitVolume, double &lossVolume,
-                              double &avgProfitTime, double &avgLossTime)
+                              double &avgProfitTime, double &avgLossTime,
+                              double &tradesPerDay)
 {
    profitCount = 0;
    lossCount = 0;
@@ -60,6 +61,10 @@ void CountPLPositionsThisMonth(int &profitCount, int &lossCount,
    datetime monthStart = iTime(NULL, PERIOD_MN1, 0);
    datetime now = TimeCurrent();
    
+   // To calculate trades per day, we need to track trading days
+   int totalTradingDays = 1; // At least 1 day to avoid division by zero
+   int lastProcessedDay = -1;
+   
    for(int i = OrdersHistoryTotal()-1; i >= 0; i--)
    {
       if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
@@ -70,6 +75,17 @@ void CountPLPositionsThisMonth(int &profitCount, int &lossCount,
             OrderCloseTime() <= now &&
             (MagicNumber == 0 || OrderMagicNumber() == MagicNumber))
          {
+            // Count trading days
+            MqlDateTime closeTimeStruct;
+            TimeToStruct(OrderCloseTime(), closeTimeStruct);
+            int closeDay = closeTimeStruct.day;
+            
+            if(closeDay != lastProcessedDay)
+            {
+               totalTradingDays++;
+               lastProcessedDay = closeDay;
+            }
+            
             double profit = OrderProfit() + OrderSwap() + OrderCommission();
             double duration = OrderCloseTime() - OrderOpenTime();
             
@@ -93,8 +109,13 @@ void CountPLPositionsThisMonth(int &profitCount, int &lossCount,
    avgProfitTime = (profitCount > 0) ? totalProfitSeconds / profitCount : 0;
    avgLossTime = (lossCount > 0) ? totalLossSeconds / lossCount : 0;
    
+   // Calculate trades per day
+   int totalTrades = profitCount + lossCount;
+   tradesPerDay = (totalTradingDays > 0) ? (double)totalTrades / totalTradingDays : 0;
+   
    profitVolume = NormalizeDouble(profitVolume, 2);
    lossVolume = NormalizeDouble(lossVolume, 2);
+   tradesPerDay = NormalizeDouble(tradesPerDay, 2);
 }
 
 //+------------------------------------------------------------------+
@@ -123,16 +144,20 @@ void UpdateDisplay()
    int profitCount, lossCount;
    double profitVolume, lossVolume;
    double avgProfitTime, avgLossTime;
+   double tradesPerDay;
    
-   CountPLPositionsThisMonth(profitCount, lossCount, profitVolume, lossVolume, avgProfitTime, avgLossTime);
+   CountPLPositionsThisMonth(profitCount, lossCount, profitVolume, lossVolume, 
+                           avgProfitTime, avgLossTime, tradesPerDay);
    string monthName = TimeToStr(iTime(NULL, PERIOD_MN1, 0), TIME_DATE);
    
    string txt = StringFormat("Closed This Month (%s):\n"+
                             "Profitable: %d trades (%.2f lots) ~ %s avg\n"+
-                            "Loss: %d trades (%.2f lots) ~ %s avg",
+                            "Loss: %d trades (%.2f lots) ~ %s avg\n"+
+                            "Trades/Day: %.2f",
                             monthName,
                             profitCount, profitVolume, FormatDuration(avgProfitTime),
-                            lossCount, lossVolume, FormatDuration(avgLossTime));
+                            lossCount, lossVolume, FormatDuration(avgLossTime),
+                            tradesPerDay);
    
    // Create or update the label
    if(ObjectFind(0, "PLTM_Label") < 0)
