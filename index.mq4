@@ -9,15 +9,15 @@
 #property strict
 
 // Input parameters
-input double LotSize = 0.01;
+input double LotSize = 0.02;
 input int TrailingStopPoints = 30 * 10;      // Only activates in profit
 input int BreakevenTriggerPoints = 50 * 10;  // Profit level to activate stop
 input int MaxOrders = 10;
 input int MagicNumber = 12345;
-input double PriceLevelAdjustment = 50 * 10;
+input double PriceLevelAdjustment = 25 * 10;
 input bool UsePercentage = false;
 input int OrderExpirationHours = 24;         // Pending order expiration
-input double GapThresholdPoints =  51 * 10; // Points above highest level to trigger recalculation
+input double GapThresholdPoints =  26 * 10; // Points above highest level to trigger recalculation
 
 // Global variables
 double priceLevels[];
