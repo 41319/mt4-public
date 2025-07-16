@@ -12,25 +12,24 @@
 input double LotSize = 0.02;
 input int TrailingStopPoints = 30 * 10;      // Only activates in profit
 input int BreakevenTriggerPoints = 50 * 10;  // Profit level to activate stop
-input int MaxOrders = 10;
+input int MaxOrders = 10;                    // Max orders per side (buy/sell)
 input int MagicNumber = 12345;
 input double PriceLevelAdjustment = 25 * 10;
 input bool UsePercentage = false;
 input int OrderExpirationHours = 24;         // Pending order expiration
-input double GapThresholdPoints =  26 * 10; // Points above highest level to trigger recalculation
+input double GapThresholdPoints = 26 * 10;    // Points above/below highest/lowest level to trigger recalculation
 
 // Global variables
-double priceLevels[];
+double buyLevels[];
+double sellLevels[];
 datetime lastCheckDate = 0;
 double monthlyVolume = 0;
-
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-
    UpdatePriceLevels();
    return(INIT_SUCCEEDED);
 }
@@ -52,16 +51,14 @@ void OnTick()
    
    if(isNewDay)
    {
-
       lastCheckDate = TimeCurrent();
    }
    
-   // Check if price has moved beyond our highest level + gap threshold
+   // Check if price has moved beyond our levels + gap threshold
    if(CheckPriceGap() || isNewDay)
    {
       UpdatePriceLevels();
       CloseAllPendingOrders();
-
    }
    
    ManageOrders();
@@ -70,29 +67,29 @@ void OnTick()
 }
 
 //+------------------------------------------------------------------+
-//| Check if current price exceeds highest level by gap threshold    |
+//| Check if current price exceeds levels by gap threshold           |
 //+------------------------------------------------------------------+
 bool CheckPriceGap()
 {
-   if(ArraySize(priceLevels) == 0) return false;
+   if(ArraySize(buyLevels) == 0 || ArraySize(sellLevels) == 0) return false;
    
-   double highestLevel = priceLevels[ArrayMaximum(priceLevels)];
+   double highestBuyLevel = buyLevels[ArrayMaximum(buyLevels)];
+   double lowestSellLevel = sellLevels[ArrayMinimum(sellLevels)];
    double currentPrice = MarketInfo(Symbol(), MODE_BID);
    double gapThreshold = GapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
    
-   if(currentPrice > (highestLevel + gapThreshold))
+   if(currentPrice > (highestBuyLevel + gapThreshold) || currentPrice < (lowestSellLevel - gapThreshold))
    {
-      Print("Price gap detected (", currentPrice, " > ", highestLevel, " + ", gapThreshold, "). Recalculating levels.");
+      Print("Price gap detected. Recalculating levels.");
       return true;
    }
    return false;
 }
 
-
 //+------------------------------------------------------------------+
 //| Count existing orders with matching symbol and magic             |
 //+------------------------------------------------------------------+
-int CountOrders()
+int CountOrders(int type = -1) // -1 = count all, OP_BUY/OP_SELL/OP_BUYLIMIT/OP_SELLLIMIT
 {
    int count = 0;
    for(int i = 0; i < OrdersTotal(); i++)
@@ -101,7 +98,8 @@ int CountOrders()
       {
          if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
          {
-            count++;
+            if(type == -1 || OrderType() == type)
+               count++;
          }
       }
    }
@@ -109,24 +107,48 @@ int CountOrders()
 }
 
 //+------------------------------------------------------------------+
-//| Place a pending Buy Limit order                                  |
+//| Place a pending order                                            |
 //+------------------------------------------------------------------+
-void PlaceOrder(int index)
+void PlaceOrder(int index, int type)
 {
    double point = MarketInfo(Symbol(), MODE_POINT);
    int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
-   double triggerPrice = priceLevels[index];
    datetime expiryTime = TimeCurrent() + OrderExpirationHours * 3600;
+   double triggerPrice = 0;
+   color arrowColor = clrNONE;
+   int orderType = 0;
+   double currentAsk = MarketInfo(Symbol(), MODE_ASK);
+   double currentBid = MarketInfo(Symbol(), MODE_BID);
 
-   // Safety checks
-   if(triggerPrice >= MarketInfo(Symbol(), MODE_ASK))
+   if(type == OP_BUYLIMIT)
    {
-      Print("Trigger price too high. Skipping. Trigger: ", triggerPrice, " >= Ask: ", MarketInfo(Symbol(), MODE_ASK));
-      return;
+      triggerPrice = buyLevels[index];
+      arrowColor = clrGreen;
+      orderType = OP_BUYLIMIT;
+      
+      // Safety check
+      if(triggerPrice >= currentAsk)
+      {
+         Print("Buy trigger price too high. Skipping. Trigger: ", triggerPrice, " >= Ask: ", currentAsk);
+         return;
+      }
+   }
+   else if(type == OP_SELLLIMIT)
+   {
+      triggerPrice = sellLevels[index];
+      arrowColor = clrRed;
+      orderType = OP_SELLLIMIT;
+      
+      // Safety check
+      if(triggerPrice <= currentBid)
+      {
+         Print("Sell trigger price too low. Skipping. Trigger: ", triggerPrice, " <= Bid: ", currentBid);
+         return;
+      }
    }
 
-   Print("Attempting BUYLIMIT @ ", triggerPrice);
-   int ticket = OrderSend(Symbol(), OP_BUYLIMIT, LotSize, triggerPrice, 3, 0, 0, "HKIndex EA", MagicNumber, expiryTime, clrGreen);
+   Print("Attempting ", OrderTypeToString(orderType), " @ ", triggerPrice);
+   int ticket = OrderSend(Symbol(), orderType, LotSize, triggerPrice, 3, 0, 0, "HKIndex EA", MagicNumber, expiryTime, arrowColor);
 
    if(ticket < 0)
       Print("OrderSend failed. Error: ", GetLastError());
@@ -134,13 +156,27 @@ void PlaceOrder(int index)
       Print("Order placed. Ticket #", ticket);
 }
 
+string OrderTypeToString(int type)
+{
+   switch(type)
+   {
+      case OP_BUY: return "BUY";
+      case OP_SELL: return "SELL";
+      case OP_BUYLIMIT: return "BUYLIMIT";
+      case OP_SELLLIMIT: return "SELLLIMIT";
+      default: return "UNKNOWN";
+   }
+}
+
 //+------------------------------------------------------------------+
 //| Manage all orders - create new ones if needed                    |
 //+------------------------------------------------------------------+
 void ManageOrders()
 {
-   int count = CountOrders();
+   int buyCount = CountOrders(OP_BUY) + CountOrders(OP_BUYLIMIT);
+   int sellCount = CountOrders(OP_SELL) + CountOrders(OP_SELLLIMIT);
    
+   // Place buy orders
    for(int i = 0; i < MaxOrders; i++)
    {
       bool orderExists = false;
@@ -148,8 +184,9 @@ void ManageOrders()
       {
          if(OrderSelect(j, SELECT_BY_POS, MODE_TRADES))
          {
-            if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber &&
-               MathAbs(OrderOpenPrice() - priceLevels[i]) < MarketInfo(Symbol(), MODE_POINT))
+            if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && 
+               (OrderType() == OP_BUYLIMIT || OrderType() == OP_BUY) &&
+               MathAbs(OrderOpenPrice() - buyLevels[i]) < MarketInfo(Symbol(), MODE_POINT))
             {
                orderExists = true;
                break;
@@ -157,10 +194,35 @@ void ManageOrders()
          }
       }
 
-      if(!orderExists && count < MaxOrders)
+      if(!orderExists && buyCount < MaxOrders)
       {
-         PlaceOrder(i);
-         count++;
+         PlaceOrder(i, OP_BUYLIMIT);
+         buyCount++;
+      }
+   }
+   
+   // Place sell orders
+   for(int i = 0; i < MaxOrders; i++)
+   {
+      bool orderExists = false;
+      for(int j = 0; j < OrdersTotal(); j++)
+      {
+         if(OrderSelect(j, SELECT_BY_POS, MODE_TRADES))
+         {
+            if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && 
+               (OrderType() == OP_SELLLIMIT || OrderType() == OP_SELL) &&
+               MathAbs(OrderOpenPrice() - sellLevels[i]) < MarketInfo(Symbol(), MODE_POINT))
+            {
+               orderExists = true;
+               break;
+            }
+         }
+      }
+
+      if(!orderExists && sellCount < MaxOrders)
+      {
+         PlaceOrder(i, OP_SELLLIMIT);
+         sellCount++;
       }
    }
 }
@@ -171,19 +233,23 @@ void ManageOrders()
 void UpdatePriceLevels()
 {
    double currentPrice = MarketInfo(Symbol(), MODE_BID);
-   ArrayResize(priceLevels, MaxOrders);
+   ArrayResize(buyLevels, MaxOrders);
+   ArrayResize(sellLevels, MaxOrders);
    
    for(int i = 0; i < MaxOrders; i++)
    {
       if(UsePercentage)
       {
-         priceLevels[i] = currentPrice * (1 - (PriceLevelAdjustment / 100.0 * (i + 1)));
+         buyLevels[i] = currentPrice * (1 - (PriceLevelAdjustment / 100.0 * (i + 1)));
+         sellLevels[i] = currentPrice * (1 + (PriceLevelAdjustment / 100.0 * (i + 1)));
       }
       else
       {
-         priceLevels[i] = NormalizeDouble(currentPrice - (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
+         buyLevels[i] = NormalizeDouble(currentPrice - (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
+         sellLevels[i] = NormalizeDouble(currentPrice + (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
       }
-      Print("Price Level ", i+1, ": ", priceLevels[i]);
+      Print("Buy Level ", i+1, ": ", buyLevels[i]);
+      Print("Sell Level ", i+1, ": ", sellLevels[i]);
    }
 }
 
@@ -196,7 +262,8 @@ void CloseAllPendingOrders()
    {
       if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
       {
-         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_BUYLIMIT)
+         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && 
+            (OrderType() == OP_BUYLIMIT || OrderType() == OP_SELLLIMIT))
          {
             bool result = OrderDelete(OrderTicket());
             if(!result)
@@ -217,21 +284,42 @@ void CheckForTrailingStop()
    {
       if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
       {
-         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_BUY)
+         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
          {
-            double currentProfit = MarketInfo(Symbol(), MODE_BID) - OrderOpenPrice();
-            double currentStop = OrderStopLoss();
-            
-            // Check if we should activate stop protection
-            if(currentProfit >= BreakevenTriggerPoints * point)
+            if(OrderType() == OP_BUY)
             {
-               double newStop = OrderOpenPrice() + (currentProfit - TrailingStopPoints * point);
+               double currentProfit = MarketInfo(Symbol(), MODE_BID) - OrderOpenPrice();
+               double currentStop = OrderStopLoss();
                
-               // Only move stop if it's higher than current stop or no stop set
-               if(currentStop == 0 || newStop > currentStop)
+               // Check if we should activate stop protection
+               if(currentProfit >= BreakevenTriggerPoints * point)
                {
-                  if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, 0, 0, clrNONE))
-                     Print("Failed to modify stop. Error: ", GetLastError());
+                  double newStop = OrderOpenPrice() + (currentProfit - TrailingStopPoints * point);
+                  
+                  // Only move stop if it's higher than current stop or no stop set
+                  if(currentStop == 0 || newStop > currentStop)
+                  {
+                     if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, OrderTakeProfit(), 0, clrNONE))
+                        Print("Failed to modify buy stop. Error: ", GetLastError());
+                  }
+               }
+            }
+            else if(OrderType() == OP_SELL)
+            {
+               double currentProfit = OrderOpenPrice() - MarketInfo(Symbol(), MODE_ASK);
+               double currentStop = OrderStopLoss();
+               
+               // Check if we should activate stop protection
+               if(currentProfit >= BreakevenTriggerPoints * point)
+               {
+                  double newStop = OrderOpenPrice() - (currentProfit - TrailingStopPoints * point);
+                  
+                  // Only move stop if it's lower than current stop or no stop set
+                  if(currentStop == 0 || newStop < currentStop)
+                  {
+                     if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, OrderTakeProfit(), 0, clrNONE))
+                        Print("Failed to modify sell stop. Error: ", GetLastError());
+                  }
                }
             }
          }
