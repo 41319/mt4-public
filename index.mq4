@@ -67,7 +67,6 @@ void OnTick()
    ManageOrders();
    CheckForTrailingStop();
    DeleteAllArrows();
-   CheckAndModifyDeepOrders()
 }
 
 //+------------------------------------------------------------------+
@@ -249,88 +248,6 @@ void DeleteAllArrows()
         if (ObjectType(name) == OBJ_ARROW)
         {
             ObjectDelete(name);
-        }
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Check and modify orders based on price movement                  |
-//+------------------------------------------------------------------+
-//+------------------------------------------------------------------+
-//| Check and modify orders based on price movement                  |
-//+------------------------------------------------------------------+
-void CheckAndModifyDeepOrders()
-{
-    bool hasVolumeOneOrder = false;
-    double point = MarketInfo(Symbol(), MODE_POINT);
-    int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
-    
-    // First pass: Check if any order already has volume of 1
-    for(int i = 0; i < OrdersTotal(); i++)
-    {
-        if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
-        {
-            if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderLots() == 1.0)
-            {
-                hasVolumeOneOrder = true;
-                break;
-            }
-        }
-    }
-    
-    // If no volume 1 orders found, look for deep orders to modify
-    if(!hasVolumeOneOrder)
-    {
-        for(int i = 0; i < OrdersTotal(); i++)
-        {
-            if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
-            {
-                if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_BUY)
-                {
-                    double currentPrice = MarketInfo(Symbol(), MODE_BID);
-                    double openPrice = OrderOpenPrice();
-                    double priceDifference = (openPrice - currentPrice) / point;
-                    
-                    // Check if price is 300 points below opening
-                    if(priceDifference >= 300)
-                    {
-                        double newTakeProfit = NormalizeDouble(currentPrice + (20 * point), digits);
-                        double currentStopLoss = OrderStopLoss();
-                        
-                        // Close the original order
-                        if(OrderClose(OrderTicket(), OrderLots(), MarketInfo(Symbol(), MODE_BID), 3, clrNONE))
-                        {
-                            // Reopen with same parameters but volume 1 and new TP
-                            int ticket = OrderSend(
-                                Symbol(),                      // symbol
-                                OP_BUY,                       // operation
-                                1.0,                          // volume (changed to 1)
-                                MarketInfo(Symbol(), MODE_ASK), // price
-                                3,                            // slippage
-                                currentStopLoss,              // stop loss (same as original)
-                                newTakeProfit,                // take profit (20 points)
-                                OrderComment(),               // same comment
-                                MagicNumber,                  // same magic number
-                                0,                            // expiration
-                                OrderColor()                  // same color
-                            );
-                            
-                            if(ticket < 0)
-                            {
-                                Print("Failed to reopen order with volume 1. Error: ", GetLastError());
-                            }
-                            else
-                            {
-                                Print("Order modified - Volume: 1, TP: ", newTakeProfit);
-                            }
-                        }
-                        else
-                        {
-                            Print("Failed to close order for volume modification. Error: ", GetLastError());
-                        }
-                    }
-                }
-            }
         }
     }
 }
