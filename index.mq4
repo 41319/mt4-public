@@ -17,7 +17,7 @@ input int MagicNumber = 12345;
 input double PriceLevelAdjustment = 25 * 10;
 input bool UsePercentage = false;
 input int OrderExpirationHours = 24;         // Pending order expiration
-input double GapThresholdPoints = 26 * 10;    // Points above/below highest/lowest level to trigger recalculation
+input double GapThresholdPoints = 26 * 10;   // Points above/below highest/lowest level to trigger recalculation
 
 // Global variables
 double buyLevels[];
@@ -55,10 +55,24 @@ void OnTick()
    }
    
    // Check if price has moved beyond our levels + gap threshold
-   if(CheckPriceGap() || isNewDay)
+   int gapCheck = CheckPriceGap();
+   if(gapCheck != 0 || isNewDay)
    {
-      UpdatePriceLevels();
-      CloseAllPendingOrders();
+      if(gapCheck == 1) // Need to update buy levels
+      {
+         UpdateBuyLevels();
+         CloseAllPendingOrders(OP_BUYLIMIT);
+      }
+      else if(gapCheck == -1) // Need to update sell levels
+      {
+         UpdateSellLevels();
+         CloseAllPendingOrders(OP_SELLLIMIT);
+      }
+      else if(isNewDay) // New day - update all
+      {
+         UpdatePriceLevels();
+         CloseAllPendingOrders();
+      }
    }
    
    ManageOrders();
@@ -68,22 +82,28 @@ void OnTick()
 
 //+------------------------------------------------------------------+
 //| Check if current price exceeds levels by gap threshold           |
+//| Returns: 1=update buy levels, -1=update sell levels, 0=no update|
 //+------------------------------------------------------------------+
-bool CheckPriceGap()
+int CheckPriceGap()
 {
-   if(ArraySize(buyLevels) == 0 || ArraySize(sellLevels) == 0) return false;
+   if(ArraySize(buyLevels) == 0 || ArraySize(sellLevels) == 0) return 0;
    
    double highestBuyLevel = buyLevels[ArrayMaximum(buyLevels)];
    double lowestSellLevel = sellLevels[ArrayMinimum(sellLevels)];
    double currentPrice = MarketInfo(Symbol(), MODE_BID);
    double gapThreshold = GapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
    
-   if(currentPrice > (highestBuyLevel + gapThreshold) || currentPrice < (lowestSellLevel - gapThreshold))
+   if(currentPrice > (lowestSellLevel + gapThreshold))
    {
-      Print("Price gap detected. Recalculating levels.");
-      return true;
+      Print("Price moved above sell levels. Recalculating sell levels only.");
+      return -1; // Need to update sell levels
    }
-   return false;
+   else if(currentPrice < (highestBuyLevel - gapThreshold))
+   {
+      Print("Price moved below buy levels. Recalculating buy levels only.");
+      return 1; // Need to update buy levels
+   }
+   return 0;
 }
 
 //+------------------------------------------------------------------+
@@ -228,46 +248,77 @@ void ManageOrders()
 }
 
 //+------------------------------------------------------------------+
-//| Update price levels based on current market price                |
+//| Update all price levels                                          |
 //+------------------------------------------------------------------+
 void UpdatePriceLevels()
 {
+   UpdateBuyLevels();
+   UpdateSellLevels();
+}
+
+//+------------------------------------------------------------------+
+//| Update buy price levels based on current market price            |
+//+------------------------------------------------------------------+
+void UpdateBuyLevels()
+{
    double currentPrice = MarketInfo(Symbol(), MODE_BID);
    ArrayResize(buyLevels, MaxOrders);
-   ArrayResize(sellLevels, MaxOrders);
    
    for(int i = 0; i < MaxOrders; i++)
    {
       if(UsePercentage)
       {
          buyLevels[i] = currentPrice * (1 - (PriceLevelAdjustment / 100.0 * (i + 1)));
-         sellLevels[i] = currentPrice * (1 + (PriceLevelAdjustment / 100.0 * (i + 1)));
       }
       else
       {
          buyLevels[i] = NormalizeDouble(currentPrice - (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
-         sellLevels[i] = NormalizeDouble(currentPrice + (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
       }
-      Print("Buy Level ", i+1, ": ", buyLevels[i]);
-      Print("Sell Level ", i+1, ": ", sellLevels[i]);
+      Print("Updated Buy Level ", i+1, ": ", buyLevels[i]);
    }
 }
 
 //+------------------------------------------------------------------+
-//| Close all pending orders                                         |
+//| Update sell price levels based on current market price           |
 //+------------------------------------------------------------------+
-void CloseAllPendingOrders()
+void UpdateSellLevels()
+{
+   double currentPrice = MarketInfo(Symbol(), MODE_BID);
+   ArrayResize(sellLevels, MaxOrders);
+   
+   for(int i = 0; i < MaxOrders; i++)
+   {
+      if(UsePercentage)
+      {
+         sellLevels[i] = currentPrice * (1 + (PriceLevelAdjustment / 100.0 * (i + 1)));
+      }
+      else
+      {
+         sellLevels[i] = NormalizeDouble(currentPrice + (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
+      }
+      Print("Updated Sell Level ", i+1, ": ", sellLevels[i]);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Close all pending orders of specified type                       |
+//+------------------------------------------------------------------+
+void CloseAllPendingOrders(int type = -1) // -1 = all pending orders
 {
    for(int i = OrdersTotal()-1; i >= 0; i--)
    {
       if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
       {
-         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && 
-            (OrderType() == OP_BUYLIMIT || OrderType() == OP_SELLLIMIT))
+         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
          {
-            bool result = OrderDelete(OrderTicket());
-            if(!result)
-               Print("Failed to delete order. Error: ", GetLastError());
+            if((type == -1 && (OrderType() == OP_BUYLIMIT || OrderType() == OP_SELLLIMIT)) ||
+               (type == OP_BUYLIMIT && OrderType() == OP_BUYLIMIT) ||
+               (type == OP_SELLLIMIT && OrderType() == OP_SELLLIMIT))
+            {
+               bool result = OrderDelete(OrderTicket());
+               if(!result)
+                  Print("Failed to delete order. Error: ", GetLastError());
+            }
          }
       }
    }
