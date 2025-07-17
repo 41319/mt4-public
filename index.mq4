@@ -9,10 +9,11 @@
 #property strict
 
 // Input parameters
-input double LotSize = 0.02;
+input double LotSize = 0.01;
 input int TrailingStopPoints = 30 * 10;      // Only activates in profit
 input int BreakevenTriggerPoints = 50 * 10;  // Profit level to activate stop
-input int MaxOrders = 10;                    // Max orders per side (buy/sell)
+input int MaxBuyOrders = 10;                 // Max buy orders (market + pending)
+input int MaxSellOrders = 10;                // Max sell orders (market + pending)
 input int MagicNumber = 12345;
 input int PriceLevelAdjustment = 25 * 10;    // Changed from double to int since we're only using points now
 input int OrderExpirationHours = 24;         // Pending order expiration
@@ -196,7 +197,7 @@ void ManageOrders()
    int sellCount = CountOrders(OP_SELL) + CountOrders(OP_SELLLIMIT);
    
    // Place buy orders
-   for(int i = 0; i < MaxOrders; i++)
+   for(int i = 0; i < MaxBuyOrders; i++)
    {
       bool orderExists = false;
       for(int j = 0; j < OrdersTotal(); j++)
@@ -213,7 +214,7 @@ void ManageOrders()
          }
       }
 
-      if(!orderExists && buyCount < MaxOrders)
+      if(!orderExists && buyCount < MaxBuyOrders)
       {
          PlaceOrder(i, OP_BUYLIMIT);
          buyCount++;
@@ -221,7 +222,7 @@ void ManageOrders()
    }
    
    // Place sell orders
-   for(int i = 0; i < MaxOrders; i++)
+   for(int i = 0; i < MaxSellOrders; i++)
    {
       bool orderExists = false;
       for(int j = 0; j < OrdersTotal(); j++)
@@ -238,7 +239,7 @@ void ManageOrders()
          }
       }
 
-      if(!orderExists && sellCount < MaxOrders)
+      if(!orderExists && sellCount < MaxSellOrders)
       {
          PlaceOrder(i, OP_SELLLIMIT);
          sellCount++;
@@ -261,9 +262,9 @@ void UpdatePriceLevels()
 void UpdateBuyLevels()
 {
    double currentPrice = MarketInfo(Symbol(), MODE_BID);
-   ArrayResize(buyLevels, MaxOrders);
+   ArrayResize(buyLevels, MaxBuyOrders);
    
-   for(int i = 0; i < MaxOrders; i++)
+   for(int i = 0; i < MaxBuyOrders; i++)
    {
       buyLevels[i] = NormalizeDouble(currentPrice - (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
       Print("Updated Buy Level ", i+1, ": ", buyLevels[i]);
@@ -276,9 +277,9 @@ void UpdateBuyLevels()
 void UpdateSellLevels()
 {
    double currentPrice = MarketInfo(Symbol(), MODE_BID);
-   ArrayResize(sellLevels, MaxOrders);
+   ArrayResize(sellLevels, MaxSellOrders);
    
-   for(int i = 0; i < MaxOrders; i++)
+   for(int i = 0; i < MaxSellOrders; i++)
    {
       sellLevels[i] = NormalizeDouble(currentPrice + (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
       Print("Updated Sell Level ", i+1, ": ", sellLevels[i]);
