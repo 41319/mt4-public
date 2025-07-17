@@ -14,10 +14,9 @@ input int TrailingStopPoints = 30 * 10;      // Only activates in profit
 input int BreakevenTriggerPoints = 50 * 10;  // Profit level to activate stop
 input int MaxOrders = 10;                    // Max orders per side (buy/sell)
 input int MagicNumber = 12345;
-input double PriceLevelAdjustment = 25 * 10;
-input bool UsePercentage = false;
+input int PriceLevelAdjustment = 25 * 10;    // Changed from double to int since we're only using points now
 input int OrderExpirationHours = 24;         // Pending order expiration
-input double GapThresholdPoints = 26 * 10;   // Points above/below highest/lowest level to trigger recalculation
+input int GapThresholdPoints = 26 * 10;      // Points above/below highest/lowest level to trigger recalculation
 
 // Global variables
 double buyLevels[];
@@ -266,14 +265,7 @@ void UpdateBuyLevels()
    
    for(int i = 0; i < MaxOrders; i++)
    {
-      if(UsePercentage)
-      {
-         buyLevels[i] = currentPrice * (1 - (PriceLevelAdjustment / 100.0 * (i + 1)));
-      }
-      else
-      {
-         buyLevels[i] = NormalizeDouble(currentPrice - (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
-      }
+      buyLevels[i] = NormalizeDouble(currentPrice - (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
       Print("Updated Buy Level ", i+1, ": ", buyLevels[i]);
    }
 }
@@ -288,14 +280,7 @@ void UpdateSellLevels()
    
    for(int i = 0; i < MaxOrders; i++)
    {
-      if(UsePercentage)
-      {
-         sellLevels[i] = currentPrice * (1 + (PriceLevelAdjustment / 100.0 * (i + 1)));
-      }
-      else
-      {
-         sellLevels[i] = NormalizeDouble(currentPrice + (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
-      }
+      sellLevels[i] = NormalizeDouble(currentPrice + (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
       Print("Updated Sell Level ", i+1, ": ", sellLevels[i]);
    }
 }
