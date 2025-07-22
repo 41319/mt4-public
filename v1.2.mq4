@@ -131,6 +131,25 @@ int CountOrders()
 }
 
 //+------------------------------------------------------------------+
+//| Create order comment with parameters                             |
+//+------------------------------------------------------------------+
+string CreateOrderComment()
+{
+   string comment = StringFormat("HKIndex|Lots=%.2f|Trail=%d|BE=%d|Max=%d|Adj=%.1f|%s|Exp=%dh|Gap=%.1f|Mode=%d",
+      LotSize,
+      TrailingStopPoints,
+      BreakevenTriggerPoints,
+      MaxOrders,
+      PriceLevelAdjustment,
+      UsePercentage ? "Pct" : "Pts",
+      OrderExpirationHours,
+      GapThresholdPoints,
+      TradingMode);
+      
+   return comment;
+}
+
+//+------------------------------------------------------------------+
 //| Place a pending order (BuyLimit or SellLimit)                    |
 //+------------------------------------------------------------------+
 void PlaceOrder(int index, bool isLong)
@@ -141,6 +160,7 @@ void PlaceOrder(int index, bool isLong)
    datetime expiryTime = TimeCurrent() + OrderExpirationHours * 3600;
    int orderType = isLong ? OP_BUYLIMIT : OP_SELLLIMIT;
    color orderColor = isLong ? clrGreen : clrRed;
+   string comment = CreateOrderComment();
 
    // Safety checks
    if(isLong && triggerPrice >= MarketInfo(Symbol(), MODE_ASK))
@@ -156,7 +176,7 @@ void PlaceOrder(int index, bool isLong)
    }
 
    Print("Attempting ", (isLong ? "BUYLIMIT" : "SELLLIMIT"), " @ ", triggerPrice);
-   int ticket = OrderSend(Symbol(), orderType, LotSize, triggerPrice, 3, 0, 0, "HKIndex EA", 0, expiryTime, orderColor);
+   int ticket = OrderSend(Symbol(), orderType, LotSize, triggerPrice, 3, 0, 0, comment, 0, expiryTime, orderColor);
 
    if(ticket < 0)
       Print("OrderSend failed. Error: ", GetLastError());
