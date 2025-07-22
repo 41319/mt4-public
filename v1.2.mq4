@@ -31,14 +31,24 @@ input ENUM_TRADING_MODE TradingMode = MODE_MIXED; // Trading mode
 double longPriceLevels[];
 double shortPriceLevels[];
 datetime lastCheckDate = 0;
-double monthlyVolume = 0;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   monthlyVolume = CalculateClosedVolumeThisMonth();
+   // Adjust parameters for US30 symbol
+   if(Symbol() == "US30")
+   {
+      TrailingStopPoints *= 10;
+      GapThresholdPoints *= 10;
+      BreakevenTriggerPoints *= 10;
+      Print("US30 detected. Adjusting parameters (multiplying by 10):");
+      Print("TrailingStopPoints=", TrailingStopPoints, 
+            ", GapThresholdPoints=", GapThresholdPoints,
+            ", BreakevenTriggerPoints=", BreakevenTriggerPoints);
+   }
+   
    UpdatePriceLevels();
    return(INIT_SUCCEEDED);
 }
@@ -60,8 +70,7 @@ void OnTick()
    
    if(isNewDay)
    {
-      monthlyVolume = CalculateClosedVolumeThisMonth();
-      Print("New day detected. Monthly volume so far: ", monthlyVolume);
+      Print("New day detected.");
       lastCheckDate = TimeCurrent();
    }
    
@@ -309,27 +318,6 @@ void CloseAllPendingOrders()
          }
       }
    }
-}
-
-//+------------------------------------------------------------------+
-//| Calculate closed order volume for current month                  |
-//+------------------------------------------------------------------+
-double CalculateClosedVolumeThisMonth()
-{
-   double totalVolume = 0.0;
-   datetime monthStart = iTime(NULL, PERIOD_MN1, 0);
-   
-   for(int i = OrdersHistoryTotal()-1; i >= 0; i--)
-   {
-      if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY) && OrderSymbol() == Symbol())
-      {
-         if(OrderCloseTime() >= monthStart)
-         {
-            totalVolume += OrderLots();
-         }
-      }
-   }
-   return totalVolume;
 }
 
 //+------------------------------------------------------------------+
