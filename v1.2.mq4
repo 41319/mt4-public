@@ -21,7 +21,6 @@ input double LotSize = 0.01;
 input int TrailingStopPoints = 30 * 10;      // Only activates in profit
 input int BreakevenTriggerPoints = 50 * 10;  // Profit level to activate stop
 input int MaxOrders = 10;
-input int MagicNumber = 12345;
 input double PriceLevelAdjustment = 25 * 10;
 input bool UsePercentage = false;
 input int OrderExpirationHours = 24;         // Pending order expiration
@@ -116,14 +115,14 @@ bool CheckPriceGap()
 }
 
 //+------------------------------------------------------------------+
-//| Count existing orders with matching symbol and magic             |
+//| Count existing orders with matching symbol                       |
 //+------------------------------------------------------------------+
 int CountOrders()
 {
    int count = 0;
    for(int i = 0; i < OrdersTotal(); i++)
    {
-      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
       {
          count++;
       }
@@ -157,7 +156,7 @@ void PlaceOrder(int index, bool isLong)
    }
 
    Print("Attempting ", (isLong ? "BUYLIMIT" : "SELLLIMIT"), " @ ", triggerPrice);
-   int ticket = OrderSend(Symbol(), orderType, LotSize, triggerPrice, 3, 0, 0, "HKIndex EA", MagicNumber, expiryTime, orderColor);
+   int ticket = OrderSend(Symbol(), orderType, LotSize, triggerPrice, 3, 0, 0, "HKIndex EA", 0, expiryTime, orderColor);
 
    if(ticket < 0)
       Print("OrderSend failed. Error: ", GetLastError());
@@ -181,7 +180,7 @@ void ManageOrders()
          bool orderExists = false;
          for(int j = 0; j < OrdersTotal(); j++)
          {
-            if(OrderSelect(j, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
+            if(OrderSelect(j, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
             {
                if(OrderType() == OP_BUYLIMIT &&
                   MathAbs(OrderOpenPrice() - longPriceLevels[i]) < MarketInfo(Symbol(), MODE_POINT))
@@ -208,7 +207,7 @@ void ManageOrders()
          bool orderExists = false;
          for(int j = 0; j < OrdersTotal(); j++)
          {
-            if(OrderSelect(j, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
+            if(OrderSelect(j, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
             {
                if(OrderType() == OP_SELLLIMIT &&
                   MathAbs(OrderOpenPrice() - shortPriceLevels[i]) < MarketInfo(Symbol(), MODE_POINT))
@@ -280,7 +279,7 @@ void CloseAllPendingOrders()
 {
    for(int i = OrdersTotal()-1; i >= 0; i--)
    {
-      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
       {
          if(OrderType() == OP_BUYLIMIT || OrderType() == OP_SELLLIMIT)
          {
@@ -302,7 +301,7 @@ double CalculateClosedVolumeThisMonth()
    
    for(int i = OrdersHistoryTotal()-1; i >= 0; i--)
    {
-      if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY) && OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
+      if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY) && OrderSymbol() == Symbol())
       {
          if(OrderCloseTime() >= monthStart)
          {
@@ -322,7 +321,7 @@ void CheckForTrailingStop()
    
    for(int i = 0; i < OrdersTotal(); i++)
    {
-      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
       {
          if(OrderType() == OP_BUY && (TradingMode == MODE_LONG || TradingMode == MODE_MIXED))
          {
