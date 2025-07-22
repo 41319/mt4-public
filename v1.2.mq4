@@ -123,12 +123,9 @@ int CountOrders()
    int count = 0;
    for(int i = 0; i < OrdersTotal(); i++)
    {
-      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
       {
-         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
-         {
-            count++;
-         }
+         count++;
       }
    }
    return count;
@@ -184,9 +181,9 @@ void ManageOrders()
          bool orderExists = false;
          for(int j = 0; j < OrdersTotal(); j++)
          {
-            if(OrderSelect(j, SELECT_BY_POS, MODE_TRADES))
+            if(OrderSelect(j, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
             {
-               if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_BUYLIMIT &&
+               if(OrderType() == OP_BUYLIMIT &&
                   MathAbs(OrderOpenPrice() - longPriceLevels[i]) < MarketInfo(Symbol(), MODE_POINT))
                {
                   orderExists = true;
@@ -211,9 +208,9 @@ void ManageOrders()
          bool orderExists = false;
          for(int j = 0; j < OrdersTotal(); j++)
          {
-            if(OrderSelect(j, SELECT_BY_POS, MODE_TRADES))
+            if(OrderSelect(j, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
             {
-               if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && OrderType() == OP_SELLLIMIT &&
+               if(OrderType() == OP_SELLLIMIT &&
                   MathAbs(OrderOpenPrice() - shortPriceLevels[i]) < MarketInfo(Symbol(), MODE_POINT))
                {
                   orderExists = true;
@@ -283,10 +280,9 @@ void CloseAllPendingOrders()
 {
    for(int i = OrdersTotal()-1; i >= 0; i--)
    {
-      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
       {
-         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber && 
-            (OrderType() == OP_BUYLIMIT || OrderType() == OP_SELLLIMIT))
+         if(OrderType() == OP_BUYLIMIT || OrderType() == OP_SELLLIMIT)
          {
             bool result = OrderDelete(OrderTicket());
             if(!result)
@@ -306,9 +302,9 @@ double CalculateClosedVolumeThisMonth()
    
    for(int i = OrdersHistoryTotal()-1; i >= 0; i--)
    {
-      if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY))
+      if(OrderSelect(i, SELECT_BY_POS, MODE_HISTORY) && OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
       {
-         if(OrderCloseTime() >= monthStart && OrderMagicNumber() == MagicNumber)
+         if(OrderCloseTime() >= monthStart)
          {
             totalVolume += OrderLots();
          }
@@ -326,40 +322,37 @@ void CheckForTrailingStop()
    
    for(int i = 0; i < OrdersTotal(); i++)
    {
-      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES))
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
       {
-         if(OrderSymbol() == Symbol() && OrderMagicNumber() == MagicNumber)
+         if(OrderType() == OP_BUY && (TradingMode == MODE_LONG || TradingMode == MODE_MIXED))
          {
-            if(OrderType() == OP_BUY && (TradingMode == MODE_LONG || TradingMode == MODE_MIXED))
+            double currentProfit = MarketInfo(Symbol(), MODE_BID) - OrderOpenPrice();
+            double currentStop = OrderStopLoss();
+            
+            if(currentProfit >= BreakevenTriggerPoints * point)
             {
-               double currentProfit = MarketInfo(Symbol(), MODE_BID) - OrderOpenPrice();
-               double currentStop = OrderStopLoss();
+               double newStop = OrderOpenPrice() + (currentProfit - TrailingStopPoints * point);
                
-               if(currentProfit >= BreakevenTriggerPoints * point)
+               if(currentStop == 0 || newStop > currentStop)
                {
-                  double newStop = OrderOpenPrice() + (currentProfit - TrailingStopPoints * point);
-                  
-                  if(currentStop == 0 || newStop > currentStop)
-                  {
-                     if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, 0, 0, clrNONE))
-                        Print("Failed to modify stop. Error: ", GetLastError());
-                  }
+                  if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, 0, 0, clrNONE))
+                     Print("Failed to modify stop. Error: ", GetLastError());
                }
             }
-            else if(OrderType() == OP_SELL && (TradingMode == MODE_SHORT || TradingMode == MODE_MIXED))
+         }
+         else if(OrderType() == OP_SELL && (TradingMode == MODE_SHORT || TradingMode == MODE_MIXED))
+         {
+            double currentProfit = OrderOpenPrice() - MarketInfo(Symbol(), MODE_ASK);
+            double currentStop = OrderStopLoss();
+            
+            if(currentProfit >= BreakevenTriggerPoints * point)
             {
-               double currentProfit = OrderOpenPrice() - MarketInfo(Symbol(), MODE_ASK);
-               double currentStop = OrderStopLoss();
+               double newStop = OrderOpenPrice() - (currentProfit - TrailingStopPoints * point);
                
-               if(currentProfit >= BreakevenTriggerPoints * point)
+               if(currentStop == 0 || newStop < currentStop)
                {
-                  double newStop = OrderOpenPrice() - (currentProfit - TrailingStopPoints * point);
-                  
-                  if(currentStop == 0 || newStop < currentStop)
-                  {
-                     if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, 0, 0, clrNONE))
-                        Print("Failed to modify stop. Error: ", GetLastError());
-                  }
+                  if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, 0, 0, clrNONE))
+                     Print("Failed to modify stop. Error: ", GetLastError());
                }
             }
          }
