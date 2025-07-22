@@ -8,6 +8,14 @@
 #property version   "1.30"
 #property strict
 
+// Enumeration for trading modes
+enum ENUM_TRADING_MODE
+{
+   MODE_LONG,    // Long positions only
+   MODE_SHORT,   // Short positions only
+   MODE_MIXED    // Both long and short positions
+};
+
 // Input parameters
 input double LotSize = 0.01;
 input int TrailingStopPoints = 30 * 10;      // Only activates in profit
@@ -18,15 +26,7 @@ input double PriceLevelAdjustment = 25 * 10;
 input bool UsePercentage = false;
 input int OrderExpirationHours = 24;         // Pending order expiration
 input double GapThresholdPoints = 26 * 10;   // Points above/below level to trigger recalculation
-input ENUM_TRADING_MODE TradingMode = MODE_MIXED; // Trading mode: MODE_LONG, MODE_SHORT, MODE_MIXED
-
-// Enumeration for trading modes
-enum ENUM_TRADING_MODE
-{
-   MODE_LONG,    // Long positions only
-   MODE_SHORT,   // Short positions only
-   MODE_MIXED    // Both long and short positions
-};
+input ENUM_TRADING_MODE TradingMode = MODE_MIXED; // Trading mode
 
 // Global variables
 double longPriceLevels[];
@@ -367,6 +367,9 @@ void CheckForTrailingStop()
    }
 }
 
+//+------------------------------------------------------------------+
+//| Delete all arrow objects from chart                              |
+//+------------------------------------------------------------------+
 void DeleteAllArrows()
 {
     int total = ObjectsTotal();
