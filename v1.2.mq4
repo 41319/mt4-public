@@ -27,6 +27,12 @@ input int OrderExpirationHours = 24;         // Pending order expiration
 input double GapThresholdPoints = 26 * 10;   // Points above/below level to trigger recalculation
 input ENUM_TRADING_MODE TradingMode = MODE_MIXED; // Trading mode
 
+// Working variables
+int workingTrailingStopPoints;
+int workingBreakevenTriggerPoints;
+double workingPriceLevelAdjustment;
+double workingGapThresholdPoints;
+
 // Global variables
 double longPriceLevels[];
 double shortPriceLevels[];
@@ -37,16 +43,21 @@ datetime lastCheckDate = 0;
 //+------------------------------------------------------------------+
 int OnInit()
 {
-   // Adjust parameters for US30 symbol
-   if(Symbol() == "US30")
+   // Apply multiplier for US30 symbol to working variables
+   double multiplier = (Symbol() == "US30") ? 10.0 : 1.0;
+   
+   workingTrailingStopPoints = (int)(TrailingStopPoints * multiplier);
+   workingBreakevenTriggerPoints = (int)(BreakevenTriggerPoints * multiplier);
+   workingPriceLevelAdjustment = PriceLevelAdjustment * multiplier;
+   workingGapThresholdPoints = GapThresholdPoints * multiplier;
+   
+   if(multiplier == 10.0)
    {
-      TrailingStopPoints *= 10;
-      GapThresholdPoints *= 10;
-      BreakevenTriggerPoints *= 10;
-      Print("US30 detected. Adjusting parameters (multiplying by 10):");
-      Print("TrailingStopPoints=", TrailingStopPoints, 
-            ", GapThresholdPoints=", GapThresholdPoints,
-            ", BreakevenTriggerPoints=", BreakevenTriggerPoints);
+      Print("US30 detected. Applying 10x multiplier to working parameters:");
+      Print("WorkingTrailingStopPoints=", workingTrailingStopPoints);
+      Print("WorkingBreakevenTriggerPoints=", workingBreakevenTriggerPoints);
+      Print("WorkingPriceLevelAdjustment=", workingPriceLevelAdjustment);
+      Print("WorkingGapThresholdPoints=", workingGapThresholdPoints);
    }
    
    UpdatePriceLevels();
@@ -92,7 +103,7 @@ void OnTick()
 bool CheckPriceGap()
 {
    double currentPrice = MarketInfo(Symbol(), MODE_BID);
-   double gapThreshold = GapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
+   double gapThreshold = workingGapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
    
    if(TradingMode == MODE_LONG || TradingMode == MODE_MIXED)
    {
@@ -146,13 +157,13 @@ string CreateOrderComment()
 {
    string comment = StringFormat("HKIndex|Lots=%.2f|Trail=%d|BE=%d|Max=%d|Adj=%.1f|%s|Exp=%dh|Gap=%.1f|Mode=%d",
       LotSize,
-      TrailingStopPoints,
-      BreakevenTriggerPoints,
+      workingTrailingStopPoints,
+      workingBreakevenTriggerPoints,
       MaxOrders,
-      PriceLevelAdjustment,
+      workingPriceLevelAdjustment,
       UsePercentage ? "Pct" : "Pts",
       OrderExpirationHours,
-      GapThresholdPoints,
+      workingGapThresholdPoints,
       TradingMode);
       
    return comment;
@@ -272,11 +283,13 @@ void UpdatePriceLevels()
       {
          if(UsePercentage)
          {
-            longPriceLevels[i] = currentPrice * (1 - (PriceLevelAdjustment / 100.0 * (i + 1)));
+            longPriceLevels[i] = currentPrice * (1 - (workingPriceLevelAdjustment / 100.0 * (i + 1)));
          }
          else
          {
-            longPriceLevels[i] = NormalizeDouble(currentPrice - (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
+            longPriceLevels[i] = NormalizeDouble(
+               currentPrice - (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), 
+               (int)MarketInfo(Symbol(), MODE_DIGITS));
          }
          Print("Long Price Level ", i+1, ": ", longPriceLevels[i]);
       }
@@ -290,11 +303,13 @@ void UpdatePriceLevels()
       {
          if(UsePercentage)
          {
-            shortPriceLevels[i] = currentPrice * (1 + (PriceLevelAdjustment / 100.0 * (i + 1)));
+            shortPriceLevels[i] = currentPrice * (1 + (workingPriceLevelAdjustment / 100.0 * (i + 1)));
          }
          else
          {
-            shortPriceLevels[i] = NormalizeDouble(currentPrice + (PriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), (int)MarketInfo(Symbol(), MODE_DIGITS));
+            shortPriceLevels[i] = NormalizeDouble(
+               currentPrice + (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), 
+               (int)MarketInfo(Symbol(), MODE_DIGITS));
          }
          Print("Short Price Level ", i+1, ": ", shortPriceLevels[i]);
       }
@@ -336,9 +351,9 @@ void CheckForTrailingStop()
             double currentProfit = MarketInfo(Symbol(), MODE_BID) - OrderOpenPrice();
             double currentStop = OrderStopLoss();
             
-            if(currentProfit >= BreakevenTriggerPoints * point)
+            if(currentProfit >= workingBreakevenTriggerPoints * point)
             {
-               double newStop = OrderOpenPrice() + (currentProfit - TrailingStopPoints * point);
+               double newStop = OrderOpenPrice() + (currentProfit - workingTrailingStopPoints * point);
                
                if(currentStop == 0 || newStop > currentStop)
                {
@@ -352,9 +367,9 @@ void CheckForTrailingStop()
             double currentProfit = OrderOpenPrice() - MarketInfo(Symbol(), MODE_ASK);
             double currentStop = OrderStopLoss();
             
-            if(currentProfit >= BreakevenTriggerPoints * point)
+            if(currentProfit >= workingBreakevenTriggerPoints * point)
             {
-               double newStop = OrderOpenPrice() - (currentProfit - TrailingStopPoints * point);
+               double newStop = OrderOpenPrice() - (currentProfit - workingTrailingStopPoints * point);
                
                if(currentStop == 0 || newStop < currentStop)
                {
