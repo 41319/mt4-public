@@ -170,6 +170,46 @@ string CreateOrderComment()
 }
 
 //+------------------------------------------------------------------+
+//| Check if new order would be too close to existing orders         |
+//+------------------------------------------------------------------+
+bool IsOrderTooClose(double price, bool isLong)
+{
+   double minDistance = workingGapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
+   
+   for(int i = 0; i < OrdersTotal(); i++)
+   {
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
+      {
+         // Check distance to all existing pending orders
+         if((OrderType() == OP_BUYLIMIT || OrderType() == OP_SELLLIMIT) &&
+            MathAbs(price - OrderOpenPrice()) < minDistance)
+         {
+            Print("Order would be too close to existing order at ", OrderOpenPrice(), 
+                  " (distance: ", MathAbs(price - OrderOpenPrice()), " < required: ", minDistance, ")");
+            return true;
+         }
+         
+         // For long orders, also check distance to opposite side orders
+         if(isLong && OrderType() == OP_SELLLIMIT && 
+            (price > OrderOpenPrice() - minDistance))
+         {
+            Print("Long order would be too close to opposite side order at ", OrderOpenPrice());
+            return true;
+         }
+         
+         // For short orders, also check distance to opposite side orders
+         if(!isLong && OrderType() == OP_BUYLIMIT && 
+            (price < OrderOpenPrice() + minDistance))
+         {
+            Print("Short order would be too close to opposite side order at ", OrderOpenPrice());
+            return true;
+         }
+      }
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
 //| Place a pending order (BuyLimit or SellLimit)                    |
 //+------------------------------------------------------------------+
 void PlaceOrder(int index, bool isLong)
@@ -181,6 +221,13 @@ void PlaceOrder(int index, bool isLong)
    int orderType = isLong ? OP_BUYLIMIT : OP_SELLLIMIT;
    color orderColor = isLong ? clrGreen : clrRed;
    string comment = CreateOrderComment();
+
+   // Check if order would be too close to existing orders
+   if(IsOrderTooClose(triggerPrice, isLong))
+   {
+      Print("Order too close to existing orders. Skipping.");
+      return;
+   }
 
    // Safety checks
    if(isLong && triggerPrice >= MarketInfo(Symbol(), MODE_ASK))
