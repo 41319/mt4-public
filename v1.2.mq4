@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Your Name"
 #property link      "https://www.yourwebsite.com"
-#property version   "1.35"
+#property version   "1.37"
 #property strict
 
 // Enumeration for trading modes
@@ -138,19 +138,24 @@ void UpdateChartDisplay()
     
     int openOrders, pendingOrders;
     CountMarketOrders(openOrders, pendingOrders);
+    
+    //--- Determine text color based on chart background for readability ---
+    color bgColor = (color)ChartGetInteger(0, CHART_COLOR_BACKGROUND);
+    color textColor = (bgColor == clrBlack || bgColor == clrNavy) ? clrWhite : clrBlack;
+
 
     // Create text labels for each input parameter, positioned from the bottom-right
-    CreateOrUpdateText("Display_Mode", "Trading Mode: " + modeStr, 5, 15, clrRed, true);
-    CreateOrUpdateText("Display_Gap", "Gap Threshold: " + DoubleToString(GapThresholdPoints, 1) + " pts", 5, 30, clrRed, true);
-    CreateOrUpdateText("Display_Expiry", "Order Expiry: " + IntegerToString(OrderExpirationHours) + " hours", 5, 45, clrRed, true);
-    CreateOrUpdateText("Display_Adjust", "Price Adjustment: " + DoubleToString(PriceLevelAdjustment, 1) + (UsePercentage ? "%" : " pts"), 5, 60, clrRed, true);
-    CreateOrUpdateText("Display_MaxOrders", "Max Orders: " + IntegerToString(MaxOrders), 5, 75, clrRed, true);
-    CreateOrUpdateText("Display_BE", "Breakeven Trigger: " + IntegerToString(BreakevenTriggerPoints) + " pts", 5, 90, clrRed, true);
-    CreateOrUpdateText("Display_Trail", "Trailing Stop: " + IntegerToString(TrailingStopPoints) + " pts", 5, 105, clrRed, true);
-    CreateOrUpdateText("Display_LotSize", "Lot Size: " + DoubleToString(LotSize, 2), 5, 120, clrRed, true);
-    CreateOrUpdateText("Display_PendingOrders", "Pending Orders: " + IntegerToString(pendingOrders), 5, 135, clrRed, true);
-    CreateOrUpdateText("Display_OpenOrders", "Open Orders: " + IntegerToString(openOrders), 5, 150, clrRed, true);
-    CreateOrUpdateText("Display_Header", "--- HKIndex Settings ---", 5, 165, clrRed, true);
+    CreateOrUpdateText("Display_Mode", "Trading Mode: " + modeStr, 5, 15, textColor, true);
+    CreateOrUpdateText("Display_Gap", "Gap Threshold: " + DoubleToString(GapThresholdPoints, 1) + " pts", 5, 30, textColor, true);
+    CreateOrUpdateText("Display_Expiry", "Order Expiry: " + IntegerToString(OrderExpirationHours) + " hours", 5, 45, textColor, true);
+    CreateOrUpdateText("Display_Adjust", "Price Adjustment: " + DoubleToString(PriceLevelAdjustment, 1) + (UsePercentage ? "%" : " pts"), 5, 60, textColor, true);
+    CreateOrUpdateText("Display_MaxOrders", "Max Orders: " + IntegerToString(MaxOrders), 5, 75, textColor, true);
+    CreateOrUpdateText("Display_BE", "Breakeven Trigger: " + IntegerToString(BreakevenTriggerPoints) + " pts", 5, 90, textColor, true);
+    CreateOrUpdateText("Display_Trail", "Trailing Stop: " + IntegerToString(TrailingStopPoints) + " pts", 5, 105, textColor, true);
+    CreateOrUpdateText("Display_LotSize", "Lot Size: " + DoubleToString(LotSize, 2), 5, 120, textColor, true);
+    CreateOrUpdateText("Display_PendingOrders", "Pending Orders: " + IntegerToString(pendingOrders), 5, 135, textColor, true);
+    CreateOrUpdateText("Display_OpenOrders", "Open Orders: " + IntegerToString(openOrders), 5, 150, textColor, true);
+    CreateOrUpdateText("Display_Header", "--- HKIndex Settings ---", 5, 165, textColor, true);
     
     ChartRedraw();
 }
@@ -165,7 +170,8 @@ void CreateOrUpdateText(string name, string text, int x, int y, color clr, bool 
         ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
         ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
         ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
-        ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_RIGHT_LOWER); // Changed to bottom-right
+        ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_RIGHT_LOWER);
+        ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_RIGHT); // Align text to the right
     }
     ObjectSetString(0, name, OBJPROP_TEXT, text);
     ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
