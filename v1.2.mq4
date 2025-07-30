@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Your Name"
 #property link      "https://www.yourwebsite.com"
-#property version   "1.32"
+#property version   "1.33"
 #property strict
 
 // Enumeration for trading modes
@@ -86,6 +86,7 @@ void OnTick()
    {
       Print("New day detected.");
       lastCheckDate = TimeCurrent();
+      UpdateChartDisplay(); // Update display on new day
    }
    
    // Check if price has moved beyond our levels + gap threshold
@@ -93,11 +94,34 @@ void OnTick()
    {
       UpdatePriceLevels();
       CloseAllPendingOrders();
+      UpdateChartDisplay(); // Update display after level changes
    }
    
    ManageOrders();
    CheckForTrailingStop();
-   // No need to call DeleteAllArrows here anymore, moved to OnDeinit
+}
+
+//+------------------------------------------------------------------+
+//| Count open and pending orders for the current symbol             |
+//+------------------------------------------------------------------+
+void CountMarketOrders(int &openCount, int &pendingCount)
+{
+    openCount = 0;
+    pendingCount = 0;
+    for(int i = 0; i < OrdersTotal(); i++)
+    {
+        if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
+        {
+            if(OrderType() == OP_BUY || OrderType() == OP_SELL)
+            {
+                openCount++;
+            }
+            else if(OrderType() == OP_BUYLIMIT || OrderType() == OP_SELLLIMIT)
+            {
+                pendingCount++;
+            }
+        }
+    }
 }
 
 //+------------------------------------------------------------------+
@@ -111,17 +135,22 @@ void UpdateChartDisplay()
     string modeStr = "Mixed";
     if(TradingMode == MODE_LONG) modeStr = "Long Only";
     if(TradingMode == MODE_SHORT) modeStr = "Short Only";
+    
+    int openOrders, pendingOrders;
+    CountMarketOrders(openOrders, pendingOrders);
 
     // Create text labels for each input parameter
-    CreateOrUpdateText("Display_Header", "--- HKIndex Settings ---", 5, 15, clrRed);
-    CreateOrUpdateText("Display_LotSize", "Lot Size: " + DoubleToString(LotSize, 2), 5, 30, clrRed);
-    CreateOrUpdateText("Display_Trail", "Trailing Stop: " + IntegerToString(TrailingStopPoints) + " pts", 5, 45, clrRed);
-    CreateOrUpdateText("Display_BE", "Breakeven Trigger: " + IntegerToString(BreakevenTriggerPoints) + " pts", 5, 60, clrRed);
-    CreateOrUpdateText("Display_MaxOrders", "Max Orders: " + IntegerToString(MaxOrders), 5, 75, clrRed);
-    CreateOrUpdateText("Display_Adjust", "Price Adjustment: " + DoubleToString(PriceLevelAdjustment, 1) + (UsePercentage ? "%" : " pts"), 5, 90, clrRed);
-    CreateOrUpdateText("Display_Expiry", "Order Expiry: " + IntegerToString(OrderExpirationHours) + " hours", 5, 105, clrRed);
-    CreateOrUpdateText("Display_Gap", "Gap Threshold: " + DoubleToString(GapThresholdPoints, 1) + " pts", 5, 120, clrRed);
-    CreateOrUpdateText("Display_Mode", "Trading Mode: " + modeStr, 5, 135, clrRed);
+    CreateOrUpdateText("Display_Header", "--- HKIndex Settings ---", 5, 15, clrRed, true);
+    CreateOrUpdateText("Display_OpenOrders", "Open Orders: " + IntegerToString(openOrders), 5, 30, clrRed, true);
+    CreateOrUpdateText("Display_PendingOrders", "Pending Orders: " + IntegerToString(pendingOrders), 5, 45, clrRed, true);
+    CreateOrUpdateText("Display_LotSize", "Lot Size: " + DoubleToString(LotSize, 2), 5, 60, clrRed, true);
+    CreateOrUpdateText("Display_Trail", "Trailing Stop: " + IntegerToString(TrailingStopPoints) + " pts", 5, 75, clrRed, true);
+    CreateOrUpdateText("Display_BE", "Breakeven Trigger: " + IntegerToString(BreakevenTriggerPoints) + " pts", 5, 90, clrRed, true);
+    CreateOrUpdateText("Display_MaxOrders", "Max Orders: " + IntegerToString(MaxOrders), 5, 105, clrRed, true);
+    CreateOrUpdateText("Display_Adjust", "Price Adjustment: " + DoubleToString(PriceLevelAdjustment, 1) + (UsePercentage ? "%" : " pts"), 5, 120, clrRed, true);
+    CreateOrUpdateText("Display_Expiry", "Order Expiry: " + IntegerToString(OrderExpirationHours) + " hours", 5, 135, clrRed, true);
+    CreateOrUpdateText("Display_Gap", "Gap Threshold: " + DoubleToString(GapThresholdPoints, 1) + " pts", 5, 150, clrRed, true);
+    CreateOrUpdateText("Display_Mode", "Trading Mode: " + modeStr, 5, 165, clrRed, true);
     
     ChartRedraw();
 }
@@ -129,7 +158,7 @@ void UpdateChartDisplay()
 //+------------------------------------------------------------------+
 //| Helper to create or update a text object                         |
 //+------------------------------------------------------------------+
-void CreateOrUpdateText(string name, string text, int x, int y, color clr)
+void CreateOrUpdateText(string name, string text, int x, int y, color clr, bool backdrop)
 {
     if(ObjectFind(0, name) != 0)
     {
@@ -140,6 +169,7 @@ void CreateOrUpdateText(string name, string text, int x, int y, color clr)
     }
     ObjectSetString(0, name, OBJPROP_TEXT, text);
     ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+    ObjectSetInteger(0, name, OBJPROP_BACK, backdrop);
 }
 
 //+------------------------------------------------------------------+
@@ -331,6 +361,7 @@ bool PlaceOrder(int index, bool isLong)
    else
    {
       Print("Order placed. Ticket #", ticket);
+      UpdateChartDisplay(); // Update display after placing order
       return true;
    }
 }
@@ -500,6 +531,8 @@ void CloseAllPendingOrders()
             bool result = OrderDelete(OrderTicket());
             if(!result)
                Print("Failed to delete order. Error: ", GetLastError());
+            else
+               UpdateChartDisplay(); // Update display after deleting order
          }
       }
    }
@@ -516,6 +549,7 @@ void CheckForTrailingStop()
    {
       if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
       {
+         bool isModified = false;
          if(OrderType() == OP_BUY && (TradingMode == MODE_LONG || TradingMode == MODE_MIXED))
          {
             double currentProfit = MarketInfo(Symbol(), MODE_BID) - OrderOpenPrice();
@@ -529,6 +563,8 @@ void CheckForTrailingStop()
                {
                   if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, 0, 0, clrNONE))
                      Print("Failed to modify stop. Error: ", GetLastError());
+                  else
+                     isModified = true;
                }
             }
          }
@@ -545,9 +581,12 @@ void CheckForTrailingStop()
                {
                   if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, 0, 0, clrNONE))
                      Print("Failed to modify stop. Error: ", GetLastError());
+                  else
+                     isModified = true;
                }
             }
          }
+         if(isModified) UpdateChartDisplay(); // Update display if an order was modified
       }
    }
 }
