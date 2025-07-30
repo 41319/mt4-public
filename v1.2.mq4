@@ -180,6 +180,50 @@ bool CheckPriceGap()
 }
 
 //+------------------------------------------------------------------+
+//| Check if price level is valid considering existing orders        |
+//+------------------------------------------------------------------+
+bool IsValidPriceLevel(double price, bool isLong)
+{
+   double minDistance = workingPriceLevelAdjustment * MarketInfo(Symbol(), MODE_POINT);
+   
+   for(int i = 0; i < OrdersTotal(); i++)
+   {
+      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
+      {
+         double orderPrice = OrderOpenPrice();
+         double distance = MathAbs(price - orderPrice);
+         
+         // If distance is less than required, level is invalid
+         if(distance < minDistance)
+         {
+            Print("Invalid level: ", price, " too close to existing order at ", orderPrice);
+            return false;
+         }
+      }
+   }
+   
+   // Additional validation for long/short levels
+   if(isLong)
+   {
+      if(price >= MarketInfo(Symbol(), MODE_ASK))
+      {
+         Print("Invalid long level: ", price, " above current ask price");
+         return false;
+      }
+   }
+   else
+   {
+      if(price <= MarketInfo(Symbol(), MODE_BID))
+      {
+         Print("Invalid short level: ", price, " below current bid price");
+         return false;
+      }
+   }
+   
+   return true;
+}
+
+//+------------------------------------------------------------------+
 //| Place a pending order (BuyLimit or SellLimit)                    |
 //+------------------------------------------------------------------+
 bool PlaceOrder(int index, bool isLong)
@@ -190,15 +234,16 @@ bool PlaceOrder(int index, bool isLong)
    double triggerPrice = isLong ? longPriceLevels[index] : shortPriceLevels[index];
    if(triggerPrice == 0.0) return false;
    
+   // Validate the price level before placing order
+   if(!IsValidPriceLevel(triggerPrice, isLong))
+      return false;
+   
    double point = MarketInfo(Symbol(), MODE_POINT);
    int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
    datetime expiryTime = TimeCurrent() + OrderExpirationHours * 3600;
    int orderType = isLong ? OP_BUYLIMIT : OP_SELLLIMIT;
    color orderColor = isLong ? clrGreen : clrRed;
    string comment = CreateOrderComment();
-
-   if(isLong && triggerPrice >= MarketInfo(Symbol(), MODE_ASK)) return false;
-   if(!isLong && triggerPrice <= MarketInfo(Symbol(), MODE_BID)) return false;
 
    Print("Attempting ", (isLong ? "BUYLIMIT" : "SELLLIMIT"), " @ ", triggerPrice);
    int ticket = OrderSend(Symbol(), orderType, LotSize, triggerPrice, 3, 0, 0, comment, 0, expiryTime, orderColor);
