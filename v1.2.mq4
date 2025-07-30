@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Your Name"
 #property link      "https://www.yourwebsite.com"
-#property version   "1.41"
+#property version   "1.42"
 #property strict
 
 // Enumeration for trading modes
@@ -60,7 +60,7 @@ int OnInit()
    }
    
    UpdatePriceLevels();
-   UpdateChartDisplay(); // Display input variables on chart
+   UpdateChartDisplay();
    return(INIT_SUCCEEDED);
 }
 
@@ -69,8 +69,8 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
-   DeleteChartDisplay(); // Clean up display objects
-   DeleteAllArrows();    // Clean up arrow objects
+   DeleteChartDisplay();
+   DeleteAllArrows();
    Print("HKIndex EA deinitialized");
 }
 
@@ -85,7 +85,7 @@ void OnTick()
    {
       Print("New day detected.");
       lastCheckDate = TimeCurrent();
-      UpdateChartDisplay(); // Update display on new day
+      UpdateChartDisplay();
    }
    
    // Check if price has moved beyond our levels + gap threshold
@@ -93,7 +93,7 @@ void OnTick()
    {
       UpdatePriceLevels();
       CloseAllPendingOrders();
-      UpdateChartDisplay(); // Update display after level changes
+      UpdateChartDisplay();
    }
    
    ManageOrders();
@@ -102,139 +102,6 @@ void OnTick()
 
 //+------------------------------------------------------------------+
 //| Count open and pending orders for the current symbol             |
-//+------------------------------------------------------------------+
-void CountMarketOrders(int &openCount, int &pendingCount)
-{
-    openCount = 0;
-    pendingCount = 0;
-    for(int i = 0; i < OrdersTotal(); i++)
-    {
-        if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
-        {
-            if(OrderType() == OP_BUY || OrderType() == OP_SELL)
-            {
-                openCount++;
-            }
-            else if(OrderType() == OP_BUYLIMIT || OrderType() == OP_SELLLIMIT)
-            {
-                pendingCount++;
-            }
-        }
-    }
-}
-
-//+------------------------------------------------------------------+
-//| Update display with input variables                              |
-//+------------------------------------------------------------------+
-void UpdateChartDisplay()
-{
-    // Clean previous display objects to prevent overlap on re-init
-    DeleteChartDisplay();
-
-    string modeStr = "Mixed";
-    if(TradingMode == MODE_LONG) modeStr = "Long Only";
-    if(TradingMode == MODE_SHORT) modeStr = "Short Only";
-    
-    int openOrders, pendingOrders;
-    CountMarketOrders(openOrders, pendingOrders);
-    
-    //--- Determine text color based on chart background for readability ---
-    color bgColor = (color)ChartGetInteger(0, CHART_COLOR_BACKGROUND);
-    color textColor = (bgColor == clrBlack || bgColor == clrNavy) ? clrWhite : clrBlack;
-
-
-    // Create text labels for each input parameter, positioned from the bottom-right
-    CreateOrUpdateText("Display_Mode", "Trading Mode: " + modeStr, 5, 15, textColor, true);
-    CreateOrUpdateText("Display_Gap", "Gap Threshold: " + DoubleToString(GapThresholdPoints, 1) + " pts", 5, 30, textColor, true);
-    CreateOrUpdateText("Display_Expiry", "Order Expiry: " + IntegerToString(OrderExpirationHours) + " hours", 5, 45, textColor, true);
-    CreateOrUpdateText("Display_Adjust", "Price Adjustment: " + DoubleToString(PriceLevelAdjustment, 1) + " pts", 5, 60, textColor, true);
-    CreateOrUpdateText("Display_MaxOrders", "Max Orders: " + IntegerToString(MaxOrders), 5, 75, textColor, true);
-    CreateOrUpdateText("Display_BE", "Breakeven Trigger: " + IntegerToString(BreakevenTriggerPoints) + " pts", 5, 90, textColor, true);
-    CreateOrUpdateText("Display_Trail", "Trailing Stop: " + IntegerToString(TrailingStopPoints) + " pts", 5, 105, textColor, true);
-    CreateOrUpdateText("Display_LotSize", "Lot Size: " + DoubleToString(LotSize, 2), 5, 120, textColor, true);
-    CreateOrUpdateText("Display_PendingOrders", "Pending Orders: " + IntegerToString(pendingOrders), 5, 135, textColor, true);
-    CreateOrUpdateText("Display_OpenOrders", "Open Orders: " + IntegerToString(openOrders), 5, 150, textColor, true);
-    CreateOrUpdateText("Display_Header", "--- HKIndex Settings ---", 5, 165, textColor, true);
-    
-    ChartRedraw();
-}
-
-//+------------------------------------------------------------------+
-//| Helper to create or update a text object                         |
-//+------------------------------------------------------------------+
-void CreateOrUpdateText(string name, string text, int x, int y, color clr, bool backdrop)
-{
-    if(ObjectFind(0, name) != 0)
-    {
-        ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
-        ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
-        ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
-        ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_RIGHT_LOWER);
-        ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_RIGHT); // Align text to the right
-    }
-    ObjectSetString(0, name, OBJPROP_TEXT, text);
-    ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
-    ObjectSetInteger(0, name, OBJPROP_BACK, backdrop);
-}
-
-//+------------------------------------------------------------------+
-//| Delete all display text objects from chart                       |
-//+------------------------------------------------------------------+
-void DeleteChartDisplay()
-{
-    string prefix = "Display_";
-    for(int i = ObjectsTotal(0, -1, OBJ_LABEL) - 1; i >= 0; i--)
-    {
-        string name = ObjectName(0, i, -1, OBJ_LABEL);
-        if(StringFind(name, prefix, 0) == 0)
-        {
-            ObjectDelete(0, name);
-        }
-    }
-}
-
-
-//+------------------------------------------------------------------+
-//| Check if current price exceeds levels by gap threshold           |
-//+------------------------------------------------------------------+
-bool CheckPriceGap()
-{
-   double currentPrice = MarketInfo(Symbol(), MODE_BID);
-   double gapThreshold = workingGapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
-   
-   if(TradingMode == MODE_LONG || TradingMode == MODE_MIXED)
-   {
-      if(ArraySize(longPriceLevels) > 0)
-      {
-         // Find the highest price level for longs (which is the maximum numerical value)
-         double highestLevel = longPriceLevels[ArrayMaximum(longPriceLevels)];
-         if(currentPrice > (highestLevel + gapThreshold))
-         {
-            Print("Price gap detected (longs). Current: ", currentPrice, " > Highest Level: ", highestLevel, " + Gap: ", gapThreshold, ". Recalculating levels.");
-            return true;
-         }
-      }
-   }
-   
-   if(TradingMode == MODE_SHORT || TradingMode == MODE_MIXED)
-   {
-      if(ArraySize(shortPriceLevels) > 0)
-      {
-         // Find the lowest price level for shorts (which is the minimum numerical value)
-         double lowestLevel = shortPriceLevels[ArrayMinimum(shortPriceLevels)];
-         if(currentPrice < (lowestLevel - gapThreshold))
-         {
-            Print("Price gap detected (shorts). Current: ", currentPrice, " < Lowest Level: ", lowestLevel, " - Gap: ", gapThreshold, ". Recalculating levels.");
-            return true;
-         }
-      }
-   }
-   
-   return false;
-}
-
-//+------------------------------------------------------------------+
-//| Count existing orders with matching symbol                       |
 //+------------------------------------------------------------------+
 int CountOrders()
 {
@@ -272,10 +139,7 @@ string CreateOrderComment()
 //+------------------------------------------------------------------+
 bool IsLevelTooClose(double potentialLevel, bool isLong)
 {
-   // Use GapThreshold to prevent clustering of same-type orders
    double sameTypeMinDistance = workingGapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
-   
-   // Use PriceLevelAdjustment for distance between opposite-type orders
    double oppositeTypeMinDistance = workingPriceLevelAdjustment * MarketInfo(Symbol(), MODE_POINT);
 
    for(int i = 0; i < OrdersTotal(); i++)
@@ -284,23 +148,18 @@ bool IsLevelTooClose(double potentialLevel, bool isLong)
       {
          double orderPrice = OrderOpenPrice();
          
-         // For a potential long level (BuyLimit)
          if(isLong)
          {
-            // Check against existing sell orders/limits
             if(OrderType() == OP_SELL || OrderType() == OP_SELLLIMIT)
             {
-               // A new Buy Limit should not be too close to or above a Sell Limit
                if(potentialLevel >= orderPrice - oppositeTypeMinDistance)
                {
                   Print("Potential long level ", potentialLevel, " is too close to existing sell order #", OrderTicket(), " at ", orderPrice);
                   return true;
                }
             }
-            // Check against existing buy orders/limits
             else if(OrderType() == OP_BUY || OrderType() == OP_BUYLIMIT)
             {
-               // Don't cluster Buy Limits too closely
                if(MathAbs(potentialLevel - orderPrice) < sameTypeMinDistance)
                {
                   Print("Potential long level ", potentialLevel, " is too close to existing buy order #", OrderTicket(), " at ", orderPrice);
@@ -308,23 +167,18 @@ bool IsLevelTooClose(double potentialLevel, bool isLong)
                }
             }
          }
-         // For a potential short level (SellLimit)
-         else // !isLong
+         else
          {
-            // Check against existing buy orders/limits
             if(OrderType() == OP_BUY || OrderType() == OP_BUYLIMIT)
             {
-               // A new Sell Limit should not be too close to or below a Buy Limit
                if(potentialLevel <= orderPrice + oppositeTypeMinDistance)
                {
                   Print("Potential short level ", potentialLevel, " is too close to existing buy order #", OrderTicket(), " at ", orderPrice);
                   return true;
                }
             }
-            // Check against existing sell orders/limits
             else if(OrderType() == OP_SELL || OrderType() == OP_SELLLIMIT)
             {
-               // Don't cluster Sell Limits too closely
                if(MathAbs(potentialLevel - orderPrice) < sameTypeMinDistance)
                {
                   Print("Potential short level ", potentialLevel, " is too close to existing sell order #", OrderTicket(), " at ", orderPrice);
@@ -337,31 +191,61 @@ bool IsLevelTooClose(double potentialLevel, bool isLong)
    return false;
 }
 
+//+------------------------------------------------------------------+
+//| Check if current price exceeds levels by gap threshold           |
+//+------------------------------------------------------------------+
+bool CheckPriceGap()
+{
+   static datetime lastGapCheckTime = 0;
+   if(TimeCurrent() - lastGapCheckTime < 3600) return false; // Only check once per hour
+   lastGapCheckTime = TimeCurrent();
+   
+   double currentPrice = MarketInfo(Symbol(), MODE_BID);
+   double gapThreshold = workingGapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
+   
+   if(TradingMode == MODE_LONG || TradingMode == MODE_MIXED)
+   {
+      if(ArraySize(longPriceLevels) > 0)
+      {
+         double highestLevel = longPriceLevels[ArrayMaximum(longPriceLevels)];
+         if(currentPrice > (highestLevel + gapThreshold))
+         {
+            Print("Price gap detected (longs). Current: ", currentPrice, 
+                  " > Highest Level: ", highestLevel, 
+                  " + Gap: ", gapThreshold, ". Recalculating levels.");
+            return true;
+         }
+      }
+   }
+   
+   if(TradingMode == MODE_SHORT || TradingMode == MODE_MIXED)
+   {
+      if(ArraySize(shortPriceLevels) > 0)
+      {
+         double lowestLevel = shortPriceLevels[ArrayMinimum(shortPriceLevels)];
+         if(currentPrice < (lowestLevel - gapThreshold))
+         {
+            Print("Price gap detected (shorts). Current: ", currentPrice, 
+                  " < Lowest Level: ", lowestLevel, 
+                  " - Gap: ", gapThreshold, ". Recalculating levels.");
+            return true;
+         }
+      }
+   }
+   
+   return false;
+}
 
 //+------------------------------------------------------------------+
 //| Place a pending order (BuyLimit or SellLimit)                    |
 //+------------------------------------------------------------------+
 bool PlaceOrder(int index, bool isLong)
 {
-   //--- Add initial checks for array bounds and valid price levels
-   if (isLong && (index < 0 || index >= ArraySize(longPriceLevels)))
-   {
-      Print("Error: Invalid index ", index, " for longPriceLevels. Size is ", ArraySize(longPriceLevels));
-      return false;
-   }
-   if (!isLong && (index < 0 || index >= ArraySize(shortPriceLevels)))
-   {
-      Print("Error: Invalid index ", index, " for shortPriceLevels. Size is ", ArraySize(shortPriceLevels));
-      return false;
-   }
+   if(isLong && (index < 0 || index >= ArraySize(longPriceLevels))) return false;
+   if(!isLong && (index < 0 || index >= ArraySize(shortPriceLevels))) return false;
 
    double triggerPrice = isLong ? longPriceLevels[index] : shortPriceLevels[index];
-
-   if (triggerPrice == 0.0)
-   {
-       Print("Error: Trigger price is 0.0. Skipping order placement for index ", index, " (isLong=", isLong, ").");
-       return false;
-   }
+   if(triggerPrice == 0.0) return false;
    
    double point = MarketInfo(Symbol(), MODE_POINT);
    int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
@@ -370,18 +254,8 @@ bool PlaceOrder(int index, bool isLong)
    color orderColor = isLong ? clrGreen : clrRed;
    string comment = CreateOrderComment();
 
-   // Safety checks
-   if(isLong && triggerPrice >= MarketInfo(Symbol(), MODE_ASK))
-   {
-      Print("BuyLimit trigger price too high. Skipping. Trigger: ", triggerPrice, " >= Ask: ", MarketInfo(Symbol(), MODE_ASK));
-      return false;
-   }
-   
-   if(!isLong && triggerPrice <= MarketInfo(Symbol(), MODE_BID))
-   {
-      Print("SellLimit trigger price too low. Skipping. Trigger: ", triggerPrice, " <= Bid: ", MarketInfo(Symbol(), MODE_BID));
-      return false;
-   }
+   if(isLong && triggerPrice >= MarketInfo(Symbol(), MODE_ASK)) return false;
+   if(!isLong && triggerPrice <= MarketInfo(Symbol(), MODE_BID)) return false;
 
    Print("Attempting ", (isLong ? "BUYLIMIT" : "SELLLIMIT"), " @ ", triggerPrice);
    int ticket = OrderSend(Symbol(), orderType, LotSize, triggerPrice, 3, 0, 0, comment, 0, expiryTime, orderColor);
@@ -394,7 +268,7 @@ bool PlaceOrder(int index, bool isLong)
    else
    {
       Print("Order placed. Ticket #", ticket);
-      UpdateChartDisplay(); // Update display after placing order
+      UpdateChartDisplay();
       return true;
    }
 }
@@ -406,12 +280,11 @@ void ManageOrders()
 {
    int count = CountOrders();
    
-   // Handle long orders
    if(TradingMode == MODE_LONG || TradingMode == MODE_MIXED)
    {
       for(int i = 0; i < ArraySize(longPriceLevels); i++)
       {
-         if (count >= MaxOrders) break; // Exit if max orders reached
+         if(count >= MaxOrders) break;
 
          bool orderExists = false;
          for(int j = 0; j < OrdersTotal(); j++)
@@ -427,20 +300,16 @@ void ManageOrders()
             }
          }
 
-         if(!orderExists)
-         {
-            if(PlaceOrder(i, true))
-               count++; // Increment only on success
-         }
+         if(!orderExists && PlaceOrder(i, true))
+            count++;
       }
    }
    
-   // Handle short orders
    if(TradingMode == MODE_SHORT || TradingMode == MODE_MIXED)
    {
       for(int i = 0; i < ArraySize(shortPriceLevels); i++)
       {
-         if (count >= MaxOrders) break; // Exit if max orders reached
+         if(count >= MaxOrders) break;
 
          bool orderExists = false;
          for(int j = 0; j < OrdersTotal(); j++)
@@ -456,11 +325,8 @@ void ManageOrders()
             }
          }
 
-         if(!orderExists)
-         {
-            if(PlaceOrder(i, false))
-               count++; // Increment only on success
-         }
+         if(!orderExists && PlaceOrder(i, false))
+            count++;
       }
    }
 }
@@ -474,66 +340,54 @@ void UpdatePriceLevels()
     double askPrice = MarketInfo(Symbol(), MODE_ASK);
     int maxOrdersPerSide = (int)MathFloor(MaxOrders / (TradingMode == MODE_MIXED ? 2.0 : 1.0));
     int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
+    double minDistanceFromPrice = workingPriceLevelAdjustment * MarketInfo(Symbol(), MODE_POINT);
 
-    // Temporary arrays to hold the new valid levels
-    double tempLongLevels[];
-    double tempShortLevels[];
-    int longCount = 0;
-    int shortCount = 0;
+    // Clear existing levels
+    ArrayResize(longPriceLevels, 0);
+    ArrayResize(shortPriceLevels, 0);
 
-    // --- Generate and Filter Long Levels (based on BID) ---
-    if (TradingMode == MODE_LONG || TradingMode == MODE_MIXED)
+    // --- Generate Long Levels ---
+    if(TradingMode == MODE_LONG || TradingMode == MODE_MIXED)
     {
-        ArrayResize(tempLongLevels, maxOrdersPerSide);
-        for (int i = 0; i < maxOrdersPerSide; i++)
+        for(int i = 0; i < maxOrdersPerSide; i++)
         {
             double potentialLevel = NormalizeDouble(
                bidPrice - (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
                digits);
 
-            if (!IsLevelTooClose(potentialLevel, true))
+            if(!IsLevelTooClose(potentialLevel, true) && 
+               (bidPrice - potentialLevel) >= minDistanceFromPrice)
             {
-                if(longCount < maxOrdersPerSide)
-                {
-                   tempLongLevels[longCount] = potentialLevel;
-                   longCount++;
-                }
+                int size = ArraySize(longPriceLevels);
+                ArrayResize(longPriceLevels, size + 1);
+                longPriceLevels[size] = potentialLevel;
             }
         }
-        ArrayResize(longPriceLevels, longCount);
-        ArrayCopy(longPriceLevels, tempLongLevels, 0, 0, longCount);
-        
-        Print("Generated ", longCount, " valid long price levels.");
-        for(int i=0; i<longCount; i++) Print("Long Price Level ", i+1, ": ", longPriceLevels[i]);
     }
 
-    // --- Generate and Filter Short Levels (based on ASK) ---
-    if (TradingMode == MODE_SHORT || TradingMode == MODE_MIXED)
+    // --- Generate Short Levels ---
+    if(TradingMode == MODE_SHORT || TradingMode == MODE_MIXED)
     {
-        ArrayResize(tempShortLevels, maxOrdersPerSide);
-        for (int i = 0; i < maxOrdersPerSide; i++)
+        for(int i = 0; i < maxOrdersPerSide; i++)
         {
             double potentialLevel = NormalizeDouble(
                askPrice + (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
                digits);
 
-            if (!IsLevelTooClose(potentialLevel, false))
+            if(!IsLevelTooClose(potentialLevel, false) && 
+               (potentialLevel - askPrice) >= minDistanceFromPrice)
             {
-                if(shortCount < maxOrdersPerSide)
-                {
-                    tempShortLevels[shortCount] = potentialLevel;
-                    shortCount++;
-                }
+                int size = ArraySize(shortPriceLevels);
+                ArrayResize(shortPriceLevels, size + 1);
+                shortPriceLevels[size] = potentialLevel;
             }
         }
-        ArrayResize(shortPriceLevels, shortCount);
-        ArrayCopy(shortPriceLevels, tempShortLevels, 0, 0, shortCount);
-
-        Print("Generated ", shortCount, " valid short price levels.");
-        for(int i=0; i<shortCount; i++) Print("Short Price Level ", i+1, ": ", shortPriceLevels[i]);
     }
-}
 
+    // Debug output
+    Print("Generated ", ArraySize(longPriceLevels), " long and ", 
+          ArraySize(shortPriceLevels), " short price levels.");
+}
 
 //+------------------------------------------------------------------+
 //| Close all pending orders                                         |
@@ -550,7 +404,7 @@ void CloseAllPendingOrders()
             if(!result)
                Print("Failed to delete order. Error: ", GetLastError());
             else
-               UpdateChartDisplay(); // Update display after deleting order
+               UpdateChartDisplay();
          }
       }
    }
@@ -604,9 +458,82 @@ void CheckForTrailingStop()
                }
             }
          }
-         if(isModified) UpdateChartDisplay(); // Update display if an order was modified
+         if(isModified) UpdateChartDisplay();
       }
    }
+}
+
+//+------------------------------------------------------------------+
+//| Update display with input variables                              |
+//+------------------------------------------------------------------+
+void UpdateChartDisplay()
+{
+    DeleteChartDisplay();
+
+    string modeStr = "Mixed";
+    if(TradingMode == MODE_LONG) modeStr = "Long Only";
+    if(TradingMode == MODE_SHORT) modeStr = "Short Only";
+    
+    int openOrders = 0, pendingOrders = 0;
+    for(int i = 0; i < OrdersTotal(); i++)
+    {
+        if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
+        {
+            if(OrderType() == OP_BUY || OrderType() == OP_SELL) openOrders++;
+            else if(OrderType() == OP_BUYLIMIT || OrderType() == OP_SELLLIMIT) pendingOrders++;
+        }
+    }
+
+    color bgColor = (color)ChartGetInteger(0, CHART_COLOR_BACKGROUND);
+    color textColor = (bgColor == clrBlack || bgColor == clrNavy) ? clrWhite : clrBlack;
+
+    CreateOrUpdateText("Display_Header", "--- HKIndex Settings ---", 5, 165, textColor, true);
+    CreateOrUpdateText("Display_OpenOrders", "Open Orders: " + IntegerToString(openOrders), 5, 150, textColor, true);
+    CreateOrUpdateText("Display_PendingOrders", "Pending Orders: " + IntegerToString(pendingOrders), 5, 135, textColor, true);
+    CreateOrUpdateText("Display_LotSize", "Lot Size: " + DoubleToString(LotSize, 2), 5, 120, textColor, true);
+    CreateOrUpdateText("Display_Trail", "Trailing Stop: " + IntegerToString(TrailingStopPoints) + " pts", 5, 105, textColor, true);
+    CreateOrUpdateText("Display_BE", "Breakeven Trigger: " + IntegerToString(BreakevenTriggerPoints) + " pts", 5, 90, textColor, true);
+    CreateOrUpdateText("Display_MaxOrders", "Max Orders: " + IntegerToString(MaxOrders), 5, 75, textColor, true);
+    CreateOrUpdateText("Display_Adjust", "Price Adjustment: " + DoubleToString(PriceLevelAdjustment, 1) + " pts", 5, 60, textColor, true);
+    CreateOrUpdateText("Display_Expiry", "Order Expiry: " + IntegerToString(OrderExpirationHours) + " hours", 5, 45, textColor, true);
+    CreateOrUpdateText("Display_Gap", "Gap Threshold: " + DoubleToString(GapThresholdPoints, 1) + " pts", 5, 30, textColor, true);
+    CreateOrUpdateText("Display_Mode", "Trading Mode: " + modeStr, 5, 15, textColor, true);
+    
+    ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+//| Helper to create or update a text object                         |
+//+------------------------------------------------------------------+
+void CreateOrUpdateText(string name, string text, int x, int y, color clr, bool backdrop)
+{
+    if(ObjectFind(0, name) != 0)
+    {
+        ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+        ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+        ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_RIGHT_LOWER);
+        ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_RIGHT);
+    }
+    ObjectSetString(0, name, OBJPROP_TEXT, text);
+    ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+    ObjectSetInteger(0, name, OBJPROP_BACK, backdrop);
+}
+
+//+------------------------------------------------------------------+
+//| Delete all display text objects from chart                       |
+//+------------------------------------------------------------------+
+void DeleteChartDisplay()
+{
+    string prefix = "Display_";
+    for(int i = ObjectsTotal(0, -1, OBJ_LABEL) - 1; i >= 0; i--)
+    {
+        string name = ObjectName(0, i, -1, OBJ_LABEL);
+        if(StringFind(name, prefix, 0) == 0)
+        {
+            ObjectDelete(0, name);
+        }
+    }
 }
 
 //+------------------------------------------------------------------+
