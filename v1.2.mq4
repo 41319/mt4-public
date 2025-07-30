@@ -517,8 +517,12 @@ void UpdateChartDisplay()
         {
             string levelText = StringFormat("L%d: %s", i+1, DoubleToString(longPriceLevels[i], digits));
             CreateOrUpdateText("Display_LongLevel"+IntegerToString(i), levelText, 5, yPos, longColor, true);
-            yPos -= 15;
             
+            // Create horizontal line for this price level
+            string lineName = "LongLevelLine_"+IntegerToString(i);
+            CreatePriceLevelLine(lineName, longPriceLevels[i], longColor, levelText);
+            
+            yPos -= 15;
             if(yPos < 15) break; // Prevent going off the bottom of the chart
         }
         
@@ -534,13 +538,37 @@ void UpdateChartDisplay()
         {
             string levelText = StringFormat("S%d: %s", i+1, DoubleToString(shortPriceLevels[i], digits));
             CreateOrUpdateText("Display_ShortLevel"+IntegerToString(i), levelText, 5, yPos, shortColor, true);
-            yPos -= 15;
             
+            // Create horizontal line for this price level
+            string lineName = "ShortLevelLine_"+IntegerToString(i);
+            CreatePriceLevelLine(lineName, shortPriceLevels[i], shortColor, levelText);
+            
+            yPos -= 15;
             if(yPos < 15) break; // Prevent going off the bottom of the chart
         }
     }
     
     ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+//| Create a horizontal line for a price level                       |
+//+------------------------------------------------------------------+
+void CreatePriceLevelLine(string name, double price, color clr, string description)
+{
+    if(ObjectFind(0, name) < 0)
+    {
+        ObjectCreate(0, name, OBJ_HLINE, 0, 0, price);
+        ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+        ObjectSetInteger(0, name, OBJPROP_STYLE, STYLE_DASHDOT);
+        ObjectSetInteger(0, name, OBJPROP_WIDTH, 1);
+        ObjectSetInteger(0, name, OBJPROP_BACK, true);
+        ObjectSetString(0, name, OBJPROP_TEXT, description);
+    }
+    else
+    {
+        ObjectMove(0, name, 0, 0, price);
+    }
 }
 
 //+------------------------------------------------------------------+
@@ -562,15 +590,28 @@ void CreateOrUpdateText(string name, string text, int x, int y, color clr, bool 
 }
 
 //+------------------------------------------------------------------+
-//| Delete all display text objects from chart                       |
+//| Delete all display objects from chart                            |
 //+------------------------------------------------------------------+
 void DeleteChartDisplay()
 {
     string prefix = "Display_";
+    string linePrefix = "LevelLine_";
+    
+    // Delete text objects
     for(int i = ObjectsTotal(0, -1, OBJ_LABEL) - 1; i >= 0; i--)
     {
         string name = ObjectName(0, i, -1, OBJ_LABEL);
         if(StringFind(name, prefix, 0) == 0)
+        {
+            ObjectDelete(0, name);
+        }
+    }
+    
+    // Delete horizontal lines
+    for(int i = ObjectsTotal(0, -1, OBJ_HLINE) - 1; i >= 0; i--)
+    {
+        string name = ObjectName(0, i, -1, OBJ_HLINE);
+        if(StringFind(name, "LongLevelLine_", 0) == 0 || StringFind(name, "ShortLevelLine_", 0) == 0)
         {
             ObjectDelete(0, name);
         }
