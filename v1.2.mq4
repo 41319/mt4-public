@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Your Name"
 #property link      "https://www.yourwebsite.com"
-#property version   "1.40"
+#property version   "1.41"
 #property strict
 
 // Enumeration for trading modes
@@ -206,8 +206,8 @@ bool CheckPriceGap()
    {
       if(ArraySize(longPriceLevels) > 0)
       {
-         // Find the highest price level for longs (which is the lowest numerical value)
-         double highestLevel = longPriceLevels[ArrayMinimum(longPriceLevels)];
+         // Find the highest price level for longs (which is the maximum numerical value)
+         double highestLevel = longPriceLevels[ArrayMaximum(longPriceLevels)];
          if(currentPrice > (highestLevel + gapThreshold))
          {
             Print("Price gap detected (longs). Current: ", currentPrice, " > Highest Level: ", highestLevel, " + Gap: ", gapThreshold, ". Recalculating levels.");
@@ -220,8 +220,8 @@ bool CheckPriceGap()
    {
       if(ArraySize(shortPriceLevels) > 0)
       {
-         // Find the lowest price level for shorts (which is the highest numerical value)
-         double lowestLevel = shortPriceLevels[ArrayMaximum(shortPriceLevels)];
+         // Find the lowest price level for shorts (which is the minimum numerical value)
+         double lowestLevel = shortPriceLevels[ArrayMinimum(shortPriceLevels)];
          if(currentPrice < (lowestLevel - gapThreshold))
          {
             Print("Price gap detected (shorts). Current: ", currentPrice, " < Lowest Level: ", lowestLevel, " - Gap: ", gapThreshold, ". Recalculating levels.");
@@ -272,8 +272,12 @@ string CreateOrderComment()
 //+------------------------------------------------------------------+
 bool IsLevelTooClose(double potentialLevel, bool isLong)
 {
-   double minDistance = workingGapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
+   // Use GapThreshold to prevent clustering of same-type orders
+   double sameTypeMinDistance = workingGapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
    
+   // Use PriceLevelAdjustment for distance between opposite-type orders
+   double oppositeTypeMinDistance = workingPriceLevelAdjustment * MarketInfo(Symbol(), MODE_POINT);
+
    for(int i = 0; i < OrdersTotal(); i++)
    {
       if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
@@ -286,7 +290,8 @@ bool IsLevelTooClose(double potentialLevel, bool isLong)
             // Check against existing sell orders/limits
             if(OrderType() == OP_SELL || OrderType() == OP_SELLLIMIT)
             {
-               if(potentialLevel >= orderPrice - minDistance)
+               // A new Buy Limit should not be too close to or above a Sell Limit
+               if(potentialLevel >= orderPrice - oppositeTypeMinDistance)
                {
                   Print("Potential long level ", potentialLevel, " is too close to existing sell order #", OrderTicket(), " at ", orderPrice);
                   return true;
@@ -295,7 +300,8 @@ bool IsLevelTooClose(double potentialLevel, bool isLong)
             // Check against existing buy orders/limits
             else if(OrderType() == OP_BUY || OrderType() == OP_BUYLIMIT)
             {
-               if(MathAbs(potentialLevel - orderPrice) < minDistance)
+               // Don't cluster Buy Limits too closely
+               if(MathAbs(potentialLevel - orderPrice) < sameTypeMinDistance)
                {
                   Print("Potential long level ", potentialLevel, " is too close to existing buy order #", OrderTicket(), " at ", orderPrice);
                   return true;
@@ -308,7 +314,8 @@ bool IsLevelTooClose(double potentialLevel, bool isLong)
             // Check against existing buy orders/limits
             if(OrderType() == OP_BUY || OrderType() == OP_BUYLIMIT)
             {
-               if(potentialLevel <= orderPrice + minDistance)
+               // A new Sell Limit should not be too close to or below a Buy Limit
+               if(potentialLevel <= orderPrice + oppositeTypeMinDistance)
                {
                   Print("Potential short level ", potentialLevel, " is too close to existing buy order #", OrderTicket(), " at ", orderPrice);
                   return true;
@@ -317,7 +324,8 @@ bool IsLevelTooClose(double potentialLevel, bool isLong)
             // Check against existing sell orders/limits
             else if(OrderType() == OP_SELL || OrderType() == OP_SELLLIMIT)
             {
-               if(MathAbs(potentialLevel - orderPrice) < minDistance)
+               // Don't cluster Sell Limits too closely
+               if(MathAbs(potentialLevel - orderPrice) < sameTypeMinDistance)
                {
                   Print("Potential short level ", potentialLevel, " is too close to existing sell order #", OrderTicket(), " at ", orderPrice);
                   return true;
