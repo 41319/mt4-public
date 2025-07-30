@@ -139,52 +139,21 @@ string CreateOrderComment()
 //+------------------------------------------------------------------+
 bool IsLevelTooClose(double potentialLevel, bool isLong)
 {
-   double sameTypeMinDistance = workingGapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
-   double oppositeTypeMinDistance = workingPriceLevelAdjustment * MarketInfo(Symbol(), MODE_POINT);
-
+   double gapThreshold = workingGapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
+   
    for(int i = 0; i < OrdersTotal(); i++)
    {
       if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
       {
          double orderPrice = OrderOpenPrice();
          
-         if(isLong)
+         // For long levels, check distance to all existing orders
+         if(MathAbs(potentialLevel - orderPrice) < gapThreshold)
          {
-            if(OrderType() == OP_SELL || OrderType() == OP_SELLLIMIT)
-            {
-               if(potentialLevel >= orderPrice - oppositeTypeMinDistance)
-               {
-                  Print("Potential long level ", potentialLevel, " is too close to existing sell order #", OrderTicket(), " at ", orderPrice);
-                  return true;
-               }
-            }
-            else if(OrderType() == OP_BUY || OrderType() == OP_BUYLIMIT)
-            {
-               if(MathAbs(potentialLevel - orderPrice) < sameTypeMinDistance)
-               {
-                  Print("Potential long level ", potentialLevel, " is too close to existing buy order #", OrderTicket(), " at ", orderPrice);
-                  return true;
-               }
-            }
-         }
-         else
-         {
-            if(OrderType() == OP_BUY || OrderType() == OP_BUYLIMIT)
-            {
-               if(potentialLevel <= orderPrice + oppositeTypeMinDistance)
-               {
-                  Print("Potential short level ", potentialLevel, " is too close to existing buy order #", OrderTicket(), " at ", orderPrice);
-                  return true;
-               }
-            }
-            else if(OrderType() == OP_SELL || OrderType() == OP_SELLLIMIT)
-            {
-               if(MathAbs(potentialLevel - orderPrice) < sameTypeMinDistance)
-               {
-                  Print("Potential short level ", potentialLevel, " is too close to existing sell order #", OrderTicket(), " at ", orderPrice);
-                  return true;
-               }
-            }
+            Print("Potential ", (isLong ? "long" : "short"), " level ", potentialLevel, 
+                  " is too close to existing order #", OrderTicket(), 
+                  " (", OrderTypeToString(OrderType()), ") at ", orderPrice);
+            return true;
          }
       }
    }
@@ -300,7 +269,7 @@ void ManageOrders()
             }
          }
 
-         if(!orderExists && PlaceOrder(i, true))
+         if(!orderExists && !IsLevelTooClose(longPriceLevels[i], true) && PlaceOrder(i, true))
             count++;
       }
    }
@@ -325,7 +294,7 @@ void ManageOrders()
             }
          }
 
-         if(!orderExists && PlaceOrder(i, false))
+         if(!orderExists && !IsLevelTooClose(shortPriceLevels[i], false) && PlaceOrder(i, false))
             count++;
       }
    }
@@ -632,4 +601,21 @@ void DeleteAllArrows()
             ObjectDelete(name);
         }
     }
+}
+
+//+------------------------------------------------------------------+
+//| Helper function to convert order type to string                  |
+//+------------------------------------------------------------------+
+string OrderTypeToString(int type)
+{
+   switch(type)
+   {
+      case OP_BUY: return "BUY";
+      case OP_SELL: return "SELL";
+      case OP_BUYLIMIT: return "BUYLIMIT";
+      case OP_SELLLIMIT: return "SELLLIMIT";
+      case OP_BUYSTOP: return "BUYSTOP";
+      case OP_SELLSTOP: return "SELLSTOP";
+      default: return "UNKNOWN";
+   }
 }
