@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Your Name"
 #property link      "https://www.yourwebsite.com"
-#property version   "1.30"
+#property version   "1.31"
 #property strict
 
 // Enumeration for trading modes
@@ -170,9 +170,9 @@ string CreateOrderComment()
 }
 
 //+------------------------------------------------------------------+
-//| Check if new order would be too close to existing orders         |
+//| Check if a potential price level is too close to existing orders |
 //+------------------------------------------------------------------+
-bool IsOrderTooClose(double price, bool isLong)
+bool IsLevelTooClose(double potentialLevel, bool isLong)
 {
    double minDistance = workingGapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
    
@@ -180,39 +180,62 @@ bool IsOrderTooClose(double price, bool isLong)
    {
       if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
       {
-         // Check distance to all existing pending orders
-         if((OrderType() == OP_BUYLIMIT || OrderType() == OP_SELLLIMIT) &&
-            MathAbs(price - OrderOpenPrice()) < minDistance)
-         {
-            Print("Order would be too close to existing order at ", OrderOpenPrice(), 
-                  " (distance: ", MathAbs(price - OrderOpenPrice()), " < required: ", minDistance, ")");
-            return true;
-         }
+         double orderPrice = OrderOpenPrice();
          
-         // For long orders, also check distance to opposite side orders
-         if(isLong && OrderType() == OP_SELLLIMIT && 
-            (price > OrderOpenPrice() - minDistance))
+         // For a potential long level (BuyLimit)
+         if(isLong)
          {
-            Print("Long order would be too close to opposite side order at ", OrderOpenPrice());
-            return true;
+            // Check against existing sell orders/limits
+            if(OrderType() == OP_SELL || OrderType() == OP_SELLLIMIT)
+            {
+               if(potentialLevel >= orderPrice - minDistance)
+               {
+                  Print("Potential long level ", potentialLevel, " is too close to existing sell order #", OrderTicket(), " at ", orderPrice);
+                  return true;
+               }
+            }
+            // Check against existing buy orders/limits
+            else if(OrderType() == OP_BUY || OrderType() == OP_BUYLIMIT)
+            {
+               if(MathAbs(potentialLevel - orderPrice) < minDistance)
+               {
+                  Print("Potential long level ", potentialLevel, " is too close to existing buy order #", OrderTicket(), " at ", orderPrice);
+                  return true;
+               }
+            }
          }
-         
-         // For short orders, also check distance to opposite side orders
-         if(!isLong && OrderType() == OP_BUYLIMIT && 
-            (price < OrderOpenPrice() + minDistance))
+         // For a potential short level (SellLimit)
+         else // !isLong
          {
-            Print("Short order would be too close to opposite side order at ", OrderOpenPrice());
-            return true;
+            // Check against existing buy orders/limits
+            if(OrderType() == OP_BUY || OrderType() == OP_BUYLIMIT)
+            {
+               if(potentialLevel <= orderPrice + minDistance)
+               {
+                  Print("Potential short level ", potentialLevel, " is too close to existing buy order #", OrderTicket(), " at ", orderPrice);
+                  return true;
+               }
+            }
+            // Check against existing sell orders/limits
+            else if(OrderType() == OP_SELL || OrderType() == OP_SELLLIMIT)
+            {
+               if(MathAbs(potentialLevel - orderPrice) < minDistance)
+               {
+                  Print("Potential short level ", potentialLevel, " is too close to existing sell order #", OrderTicket(), " at ", orderPrice);
+                  return true;
+               }
+            }
          }
       }
    }
    return false;
 }
 
+
 //+------------------------------------------------------------------+
 //| Place a pending order (BuyLimit or SellLimit)                    |
 //+------------------------------------------------------------------+
-void PlaceOrder(int index, bool isLong)
+bool PlaceOrder(int index, bool isLong)
 {
    double point = MarketInfo(Symbol(), MODE_POINT);
    int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
@@ -222,33 +245,32 @@ void PlaceOrder(int index, bool isLong)
    color orderColor = isLong ? clrGreen : clrRed;
    string comment = CreateOrderComment();
 
-   // Check if order would be too close to existing orders
-   if(IsOrderTooClose(triggerPrice, isLong))
-   {
-      Print("Order too close to existing orders. Skipping.");
-      return;
-   }
-
    // Safety checks
    if(isLong && triggerPrice >= MarketInfo(Symbol(), MODE_ASK))
    {
       Print("BuyLimit trigger price too high. Skipping. Trigger: ", triggerPrice, " >= Ask: ", MarketInfo(Symbol(), MODE_ASK));
-      return;
+      return false;
    }
    
    if(!isLong && triggerPrice <= MarketInfo(Symbol(), MODE_BID))
    {
       Print("SellLimit trigger price too low. Skipping. Trigger: ", triggerPrice, " <= Bid: ", MarketInfo(Symbol(), MODE_BID));
-      return;
+      return false;
    }
 
    Print("Attempting ", (isLong ? "BUYLIMIT" : "SELLLIMIT"), " @ ", triggerPrice);
    int ticket = OrderSend(Symbol(), orderType, LotSize, triggerPrice, 3, 0, 0, comment, 0, expiryTime, orderColor);
 
    if(ticket < 0)
+   {
       Print("OrderSend failed. Error: ", GetLastError());
+      return false;
+   }
    else
+   {
       Print("Order placed. Ticket #", ticket);
+      return true;
+   }
 }
 
 //+------------------------------------------------------------------+
@@ -257,13 +279,14 @@ void PlaceOrder(int index, bool isLong)
 void ManageOrders()
 {
    int count = CountOrders();
-   int maxOrdersPerSide = (int)MathFloor(MaxOrders / (TradingMode == MODE_MIXED ? 2.0 : 1.0));
    
    // Handle long orders
    if(TradingMode == MODE_LONG || TradingMode == MODE_MIXED)
    {
-      for(int i = 0; i < maxOrdersPerSide; i++)
+      for(int i = 0; i < ArraySize(longPriceLevels); i++)
       {
+         if (count >= MaxOrders) break; // Exit if max orders reached
+
          bool orderExists = false;
          for(int j = 0; j < OrdersTotal(); j++)
          {
@@ -278,10 +301,10 @@ void ManageOrders()
             }
          }
 
-         if(!orderExists && count < MaxOrders)
+         if(!orderExists)
          {
-            PlaceOrder(i, true);
-            count++;
+            if(PlaceOrder(i, true))
+               count++; // Increment only on success
          }
       }
    }
@@ -289,8 +312,10 @@ void ManageOrders()
    // Handle short orders
    if(TradingMode == MODE_SHORT || TradingMode == MODE_MIXED)
    {
-      for(int i = 0; i < maxOrdersPerSide; i++)
+      for(int i = 0; i < ArraySize(shortPriceLevels); i++)
       {
+         if (count >= MaxOrders) break; // Exit if max orders reached
+
          bool orderExists = false;
          for(int j = 0; j < OrdersTotal(); j++)
          {
@@ -305,10 +330,10 @@ void ManageOrders()
             }
          }
 
-         if(!orderExists && count < MaxOrders)
+         if(!orderExists)
          {
-            PlaceOrder(i, false);
-            count++;
+            if(PlaceOrder(i, false))
+               count++; // Increment only on success
          }
       }
    }
@@ -319,49 +344,85 @@ void ManageOrders()
 //+------------------------------------------------------------------+
 void UpdatePriceLevels()
 {
-   double currentPrice = MarketInfo(Symbol(), MODE_BID);
-   int maxOrdersPerSide = (int)MathFloor(MaxOrders / (TradingMode == MODE_MIXED ? 2.0 : 1.0));
-   
-   // Update long levels
-   if(TradingMode == MODE_LONG || TradingMode == MODE_MIXED)
-   {
-      ArrayResize(longPriceLevels, maxOrdersPerSide);
-      for(int i = 0; i < maxOrdersPerSide; i++)
-      {
-         if(UsePercentage)
-         {
-            longPriceLevels[i] = currentPrice * (1 - (workingPriceLevelAdjustment / 100.0 * (i + 1)));
-         }
-         else
-         {
-            longPriceLevels[i] = NormalizeDouble(
-               currentPrice - (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), 
-               (int)MarketInfo(Symbol(), MODE_DIGITS));
-         }
-         Print("Long Price Level ", i+1, ": ", longPriceLevels[i]);
-      }
-   }
-   
-   // Update short levels
-   if(TradingMode == MODE_SHORT || TradingMode == MODE_MIXED)
-   {
-      ArrayResize(shortPriceLevels, maxOrdersPerSide);
-      for(int i = 0; i < maxOrdersPerSide; i++)
-      {
-         if(UsePercentage)
-         {
-            shortPriceLevels[i] = currentPrice * (1 + (workingPriceLevelAdjustment / 100.0 * (i + 1)));
-         }
-         else
-         {
-            shortPriceLevels[i] = NormalizeDouble(
-               currentPrice + (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)), 
-               (int)MarketInfo(Symbol(), MODE_DIGITS));
-         }
-         Print("Short Price Level ", i+1, ": ", shortPriceLevels[i]);
-      }
-   }
+    double currentPrice = MarketInfo(Symbol(), MODE_BID);
+    int maxOrdersPerSide = (int)MathFloor(MaxOrders / (TradingMode == MODE_MIXED ? 2.0 : 1.0));
+    int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
+
+    // Temporary arrays to hold the new valid levels
+    double tempLongLevels[];
+    double tempShortLevels[];
+    int longCount = 0;
+    int shortCount = 0;
+
+    // --- Generate and Filter Long Levels ---
+    if (TradingMode == MODE_LONG || TradingMode == MODE_MIXED)
+    {
+        ArrayResize(tempLongLevels, maxOrdersPerSide);
+        for (int i = 0; i < maxOrdersPerSide; i++)
+        {
+            double potentialLevel;
+            if (UsePercentage)
+            {
+                potentialLevel = currentPrice * (1 - (workingPriceLevelAdjustment / 100.0 * (i + 1)));
+            }
+            else
+            {
+                potentialLevel = NormalizeDouble(
+                   currentPrice - (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
+                   digits);
+            }
+
+            if (!IsLevelTooClose(potentialLevel, true))
+            {
+                if(longCount < maxOrdersPerSide)
+                {
+                   tempLongLevels[longCount] = potentialLevel;
+                   longCount++;
+                }
+            }
+        }
+        ArrayResize(longPriceLevels, longCount);
+        ArrayCopy(longPriceLevels, tempLongLevels, 0, 0, longCount);
+        
+        Print("Generated ", longCount, " valid long price levels.");
+        for(int i=0; i<longCount; i++) Print("Long Price Level ", i+1, ": ", longPriceLevels[i]);
+    }
+
+    // --- Generate and Filter Short Levels ---
+    if (TradingMode == MODE_SHORT || TradingMode == MODE_MIXED)
+    {
+        ArrayResize(tempShortLevels, maxOrdersPerSide);
+        for (int i = 0; i < maxOrdersPerSide; i++)
+        {
+            double potentialLevel;
+            if (UsePercentage)
+            {
+                potentialLevel = currentPrice * (1 + (workingPriceLevelAdjustment / 100.0 * (i + 1)));
+            }
+            else
+            {
+                potentialLevel = NormalizeDouble(
+                   currentPrice + (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
+                   digits);
+            }
+
+            if (!IsLevelTooClose(potentialLevel, false))
+            {
+                if(shortCount < maxOrdersPerSide)
+                {
+                    tempShortLevels[shortCount] = potentialLevel;
+                    shortCount++;
+                }
+            }
+        }
+        ArrayResize(shortPriceLevels, shortCount);
+        ArrayCopy(shortPriceLevels, tempShortLevels, 0, 0, shortCount);
+
+        Print("Generated ", shortCount, " valid short price levels.");
+        for(int i=0; i<shortCount; i++) Print("Short Price Level ", i+1, ": ", shortPriceLevels[i]);
+    }
 }
+
 
 //+------------------------------------------------------------------+
 //| Close all pending orders                                         |
