@@ -150,7 +150,7 @@ bool IsLevelTooClose(double potentialLevel, bool isLong)
          
          if(isLong)
          {
-            if(OrderType() == OP_SELL || OrderType() == OP_SELLIMIT)
+            if(OrderType() == OP_SELL || OrderType() == OP_SELLLIMIT)
             {
                if(potentialLevel >= orderPrice - oppositeTypeMinDistance)
                {
@@ -486,90 +486,57 @@ void UpdateChartDisplay()
 
     color bgColor = (color)ChartGetInteger(0, CHART_COLOR_BACKGROUND);
     color textColor = (bgColor == clrBlack || bgColor == clrNavy) ? clrWhite : clrBlack;
-    color longColor = clrDodgerBlue;
-    color shortColor = clrOrangeRed;
+    color longColor = clrGreen;
+    color shortColor = clrRed;
 
-    // Get market information
+    // Get the point value for the current symbol
     double pointValue = MarketInfo(Symbol(), MODE_POINT);
     int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
-    double currentBid = MarketInfo(Symbol(), MODE_BID);
-    double currentAsk = MarketInfo(Symbol(), MODE_ASK);
-    
-    // Display settings - starting position
-    int yPos = 20;  // Start from top of chart
-    int xPos = 10;   // Left side of chart
-    
-    // Display current market prices
-    CreateOrUpdateText("Display_CurrentPrices", "Current Market: Bid=" + DoubleToString(currentBid, digits) + 
-                       " Ask=" + DoubleToString(currentAsk, digits), xPos, yPos, textColor, true);
-    yPos += 20;
     
     // Display settings
-    CreateOrUpdateText("Display_Header", "--- HKIndex Settings ---", xPos, yPos, textColor, true); yPos += 15;
-    CreateOrUpdateText("Display_Mode", "Trading Mode: " + modeStr, xPos, yPos, textColor, true); yPos += 15;
-    CreateOrUpdateText("Display_LotSize", "Lot Size: " + DoubleToString(LotSize, 2), xPos, yPos, textColor, true); yPos += 15;
-    CreateOrUpdateText("Display_OpenOrders", "Open Orders: " + IntegerToString(openOrders), xPos, yPos, textColor, true); yPos += 15;
-    CreateOrUpdateText("Display_PendingOrders", "Pending Orders: " + IntegerToString(pendingOrders), xPos, yPos, textColor, true); yPos += 30;
+    int yPos = 180;
+    CreateOrUpdateText("Display_Header", "--- HKIndex Settings ---", 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_PointValue", "Point Value: " + DoubleToString(pointValue, digits), 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_OpenOrders", "Open Orders: " + IntegerToString(openOrders), 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_PendingOrders", "Pending Orders: " + IntegerToString(pendingOrders), 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_LotSize", "Lot Size: " + DoubleToString(LotSize, 2), 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_Trail", "Trailing Stop: " + IntegerToString(TrailingStopPoints) + " pts", 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_BE", "Breakeven Trigger: " + IntegerToString(BreakevenTriggerPoints) + " pts", 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_MaxOrders", "Max Orders: " + IntegerToString(MaxOrders), 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_Adjust", "Price Adjustment: " + DoubleToString(PriceLevelAdjustment, 1) + " pts", 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_Expiry", "Order Expiry: " + IntegerToString(OrderExpirationHours) + " hours", 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_Gap", "Gap Threshold: " + DoubleToString(GapThresholdPoints, 1) + " pts", 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_Mode", "Trading Mode: " + modeStr, 5, yPos, textColor, true); yPos -= 30;
 
     // Display long price levels
-    if((TradingMode == MODE_LONG || TradingMode == MODE_MIXED) && ArraySize(longPriceLevels) > 0)
+    if(TradingMode == MODE_LONG || TradingMode == MODE_MIXED)
     {
-        CreateOrUpdateText("Display_LongHeader", "--- BUY LIMIT Levels ---", xPos, yPos, longColor, true); yPos += 15;
+        CreateOrUpdateText("Display_LongHeader", "--- LONG Levels ---", 5, yPos, longColor, true); yPos -= 15;
         
         for(int i = 0; i < ArraySize(longPriceLevels); i++)
         {
-            double distance = (longPriceLevels[i] - currentBid)/pointValue;
-            string levelText = StringFormat("L%d: %s (%+.0f pts)", 
-                                          i+1, 
-                                          DoubleToString(longPriceLevels[i], digits),
-                                          distance);
-            CreateOrUpdateText("Display_LongLevel"+IntegerToString(i), levelText, xPos, yPos, longColor, true);
-            yPos += 15;
+            string levelText = StringFormat("L%d: %s", i+1, DoubleToString(longPriceLevels[i], digits));
+            CreateOrUpdateText("Display_LongLevel"+IntegerToString(i), levelText, 5, yPos, longColor, true);
+            yPos -= 15;
             
-            // Draw horizontal line for this level
-            string lineName = "LongLevelLine_"+IntegerToString(i);
-            if(ObjectFind(0, lineName) < 0)
-            {
-                ObjectCreate(0, lineName, OBJ_HLINE, 0, 0, longPriceLevels[i]);
-                ObjectSetInteger(0, lineName, OBJPROP_COLOR, longColor);
-                ObjectSetInteger(0, lineName, OBJPROP_STYLE, STYLE_DOT);
-                ObjectSetInteger(0, lineName, OBJPROP_WIDTH, 1);
-                ObjectSetInteger(0, lineName, OBJPROP_BACK, true);
-            }
-            
-            if(yPos > 180) break; // Prevent going off the bottom of visible area
+            if(yPos < 15) break; // Prevent going off the bottom of the chart
         }
         
-        yPos += 15; // Extra space before shorts
+        yPos -= 15; // Extra space before shorts
     }
 
     // Display short price levels
-    if((TradingMode == MODE_SHORT || TradingMode == MODE_MIXED) && ArraySize(shortPriceLevels) > 0)
+    if(TradingMode == MODE_SHORT || TradingMode == MODE_MIXED)
     {
-        CreateOrUpdateText("Display_ShortHeader", "--- SELL LIMIT Levels ---", xPos, yPos, shortColor, true); yPos += 15;
+        CreateOrUpdateText("Display_ShortHeader", "--- SHORT Levels ---", 5, yPos, shortColor, true); yPos -= 15;
         
         for(int i = 0; i < ArraySize(shortPriceLevels); i++)
         {
-            double distance = (currentAsk - shortPriceLevels[i])/pointValue;
-            string levelText = StringFormat("S%d: %s (%+.0f pts)", 
-                                          i+1, 
-                                          DoubleToString(shortPriceLevels[i], digits),
-                                          distance);
-            CreateOrUpdateText("Display_ShortLevel"+IntegerToString(i), levelText, xPos, yPos, shortColor, true);
-            yPos += 15;
+            string levelText = StringFormat("S%d: %s", i+1, DoubleToString(shortPriceLevels[i], digits));
+            CreateOrUpdateText("Display_ShortLevel"+IntegerToString(i), levelText, 5, yPos, shortColor, true);
+            yPos -= 15;
             
-            // Draw horizontal line for this level
-            string lineName = "ShortLevelLine_"+IntegerToString(i);
-            if(ObjectFind(0, lineName) < 0)
-            {
-                ObjectCreate(0, lineName, OBJ_HLINE, 0, 0, shortPriceLevels[i]);
-                ObjectSetInteger(0, lineName, OBJPROP_COLOR, shortColor);
-                ObjectSetInteger(0, lineName, OBJPROP_STYLE, STYLE_DOT);
-                ObjectSetInteger(0, lineName, OBJPROP_WIDTH, 1);
-                ObjectSetInteger(0, lineName, OBJPROP_BACK, true);
-            }
-            
-            if(yPos > 180) break; // Prevent going off the bottom of visible area
+            if(yPos < 15) break; // Prevent going off the bottom of the chart
         }
     }
     
@@ -586,8 +553,8 @@ void CreateOrUpdateText(string name, string text, int x, int y, color clr, bool 
         ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
         ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
         ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
-        ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-        ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_LEFT);
+        ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_RIGHT_LOWER);
+        ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_RIGHT);
     }
     ObjectSetString(0, name, OBJPROP_TEXT, text);
     ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
@@ -595,36 +562,14 @@ void CreateOrUpdateText(string name, string text, int x, int y, color clr, bool 
 }
 
 //+------------------------------------------------------------------+
-//| Clean up all chart objects                                       |
+//| Delete all display text objects from chart                       |
 //+------------------------------------------------------------------+
 void DeleteChartDisplay()
 {
-    // Delete text objects
     string prefix = "Display_";
     for(int i = ObjectsTotal(0, -1, OBJ_LABEL) - 1; i >= 0; i--)
     {
         string name = ObjectName(0, i, -1, OBJ_LABEL);
-        if(StringFind(name, prefix, 0) == 0)
-        {
-            ObjectDelete(0, name);
-        }
-    }
-    
-    // Delete level lines
-    prefix = "LongLevelLine_";
-    for(int i = ObjectsTotal(0, -1, OBJ_HLINE) - 1; i >= 0; i--)
-    {
-        string name = ObjectName(0, i, -1, OBJ_HLINE);
-        if(StringFind(name, prefix, 0) == 0)
-        {
-            ObjectDelete(0, name);
-        }
-    }
-    
-    prefix = "ShortLevelLine_";
-    for(int i = ObjectsTotal(0, -1, OBJ_HLINE) - 1; i >= 0; i--)
-    {
-        string name = ObjectName(0, i, -1, OBJ_HLINE);
         if(StringFind(name, prefix, 0) == 0)
         {
             ObjectDelete(0, name);
