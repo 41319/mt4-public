@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Your Name"
 #property link      "https://www.yourwebsite.com"
-#property version   "1.34"
+#property version   "1.35"
 #property strict
 
 // Enumeration for trading modes
@@ -139,7 +139,7 @@ void UpdateChartDisplay()
     int openOrders, pendingOrders;
     CountMarketOrders(openOrders, pendingOrders);
 
-    // Create text labels for each input parameter, positioned from the bottom-left
+    // Create text labels for each input parameter, positioned from the bottom-right
     CreateOrUpdateText("Display_Mode", "Trading Mode: " + modeStr, 5, 15, clrRed, true);
     CreateOrUpdateText("Display_Gap", "Gap Threshold: " + DoubleToString(GapThresholdPoints, 1) + " pts", 5, 30, clrRed, true);
     CreateOrUpdateText("Display_Expiry", "Order Expiry: " + IntegerToString(OrderExpirationHours) + " hours", 5, 45, clrRed, true);
@@ -165,7 +165,7 @@ void CreateOrUpdateText(string name, string text, int x, int y, color clr, bool 
         ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
         ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
         ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
-        ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_LOWER); // Changed to bottom-left
+        ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_RIGHT_LOWER); // Changed to bottom-right
     }
     ObjectSetString(0, name, OBJPROP_TEXT, text);
     ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
