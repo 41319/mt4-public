@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Your Name"
 #property link      "https://www.yourwebsite.com"
-#property version   "1.31"
+#property version   "1.32"
 #property strict
 
 // Enumeration for trading modes
@@ -61,6 +61,7 @@ int OnInit()
    }
    
    UpdatePriceLevels();
+   UpdateChartDisplay(); // Display input variables on chart
    return(INIT_SUCCEEDED);
 }
 
@@ -69,6 +70,8 @@ int OnInit()
 //+------------------------------------------------------------------+
 void OnDeinit(const int reason)
 {
+   DeleteChartDisplay(); // Clean up display objects
+   DeleteAllArrows();    // Clean up arrow objects
    Print("HKIndex EA deinitialized");
 }
 
@@ -94,8 +97,67 @@ void OnTick()
    
    ManageOrders();
    CheckForTrailingStop();
-   DeleteAllArrows();
+   // No need to call DeleteAllArrows here anymore, moved to OnDeinit
 }
+
+//+------------------------------------------------------------------+
+//| Update display with input variables                              |
+//+------------------------------------------------------------------+
+void UpdateChartDisplay()
+{
+    // Clean previous display objects to prevent overlap on re-init
+    DeleteChartDisplay();
+
+    string modeStr = "Mixed";
+    if(TradingMode == MODE_LONG) modeStr = "Long Only";
+    if(TradingMode == MODE_SHORT) modeStr = "Short Only";
+
+    // Create text labels for each input parameter
+    CreateOrUpdateText("Display_Header", "--- HKIndex Settings ---", 5, 15, clrRed);
+    CreateOrUpdateText("Display_LotSize", "Lot Size: " + DoubleToString(LotSize, 2), 5, 30, clrRed);
+    CreateOrUpdateText("Display_Trail", "Trailing Stop: " + IntegerToString(TrailingStopPoints) + " pts", 5, 45, clrRed);
+    CreateOrUpdateText("Display_BE", "Breakeven Trigger: " + IntegerToString(BreakevenTriggerPoints) + " pts", 5, 60, clrRed);
+    CreateOrUpdateText("Display_MaxOrders", "Max Orders: " + IntegerToString(MaxOrders), 5, 75, clrRed);
+    CreateOrUpdateText("Display_Adjust", "Price Adjustment: " + DoubleToString(PriceLevelAdjustment, 1) + (UsePercentage ? "%" : " pts"), 5, 90, clrRed);
+    CreateOrUpdateText("Display_Expiry", "Order Expiry: " + IntegerToString(OrderExpirationHours) + " hours", 5, 105, clrRed);
+    CreateOrUpdateText("Display_Gap", "Gap Threshold: " + DoubleToString(GapThresholdPoints, 1) + " pts", 5, 120, clrRed);
+    CreateOrUpdateText("Display_Mode", "Trading Mode: " + modeStr, 5, 135, clrRed);
+    
+    ChartRedraw();
+}
+
+//+------------------------------------------------------------------+
+//| Helper to create or update a text object                         |
+//+------------------------------------------------------------------+
+void CreateOrUpdateText(string name, string text, int x, int y, color clr)
+{
+    if(ObjectFind(0, name) != 0)
+    {
+        ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+        ObjectSetInteger(0, name, OBJPROP_XDISTANCE, x);
+        ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y);
+        ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    }
+    ObjectSetString(0, name, OBJPROP_TEXT, text);
+    ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+}
+
+//+------------------------------------------------------------------+
+//| Delete all display text objects from chart                       |
+//+------------------------------------------------------------------+
+void DeleteChartDisplay()
+{
+    string prefix = "Display_";
+    for(int i = ObjectsTotal(0, -1, OBJ_LABEL) - 1; i >= 0; i--)
+    {
+        string name = ObjectName(0, i, -1, OBJ_LABEL);
+        if(StringFind(name, prefix, 0) == 0)
+        {
+            ObjectDelete(0, name);
+        }
+    }
+}
+
 
 //+------------------------------------------------------------------+
 //| Check if current price exceeds levels by gap threshold           |
