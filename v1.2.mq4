@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Your Name"
 #property link      "https://www.yourwebsite.com"
-#property version   "1.39"
+#property version   "1.40"
 #property strict
 
 // Enumeration for trading modes
@@ -206,10 +206,11 @@ bool CheckPriceGap()
    {
       if(ArraySize(longPriceLevels) > 0)
       {
-         double highestLevel = longPriceLevels[ArrayMaximum(longPriceLevels)];
+         // Find the highest price level for longs (which is the lowest numerical value)
+         double highestLevel = longPriceLevels[ArrayMinimum(longPriceLevels)];
          if(currentPrice > (highestLevel + gapThreshold))
          {
-            Print("Price gap detected (", currentPrice, " > ", highestLevel, " + ", gapThreshold, "). Recalculating levels.");
+            Print("Price gap detected (longs). Current: ", currentPrice, " > Highest Level: ", highestLevel, " + Gap: ", gapThreshold, ". Recalculating levels.");
             return true;
          }
       }
@@ -219,10 +220,11 @@ bool CheckPriceGap()
    {
       if(ArraySize(shortPriceLevels) > 0)
       {
-         double lowestLevel = shortPriceLevels[ArrayMinimum(shortPriceLevels)];
+         // Find the lowest price level for shorts (which is the highest numerical value)
+         double lowestLevel = shortPriceLevels[ArrayMaximum(shortPriceLevels)];
          if(currentPrice < (lowestLevel - gapThreshold))
          {
-            Print("Price gap detected (", currentPrice, " < ", lowestLevel, " - ", gapThreshold, "). Recalculating levels.");
+            Print("Price gap detected (shorts). Current: ", currentPrice, " < Lowest Level: ", lowestLevel, " - Gap: ", gapThreshold, ". Recalculating levels.");
             return true;
          }
       }
@@ -333,9 +335,28 @@ bool IsLevelTooClose(double potentialLevel, bool isLong)
 //+------------------------------------------------------------------+
 bool PlaceOrder(int index, bool isLong)
 {
+   //--- Add initial checks for array bounds and valid price levels
+   if (isLong && (index < 0 || index >= ArraySize(longPriceLevels)))
+   {
+      Print("Error: Invalid index ", index, " for longPriceLevels. Size is ", ArraySize(longPriceLevels));
+      return false;
+   }
+   if (!isLong && (index < 0 || index >= ArraySize(shortPriceLevels)))
+   {
+      Print("Error: Invalid index ", index, " for shortPriceLevels. Size is ", ArraySize(shortPriceLevels));
+      return false;
+   }
+
+   double triggerPrice = isLong ? longPriceLevels[index] : shortPriceLevels[index];
+
+   if (triggerPrice == 0.0)
+   {
+       Print("Error: Trigger price is 0.0. Skipping order placement for index ", index, " (isLong=", isLong, ").");
+       return false;
+   }
+   
    double point = MarketInfo(Symbol(), MODE_POINT);
    int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
-   double triggerPrice = isLong ? longPriceLevels[index] : shortPriceLevels[index];
    datetime expiryTime = TimeCurrent() + OrderExpirationHours * 3600;
    int orderType = isLong ? OP_BUYLIMIT : OP_SELLLIMIT;
    color orderColor = isLong ? clrGreen : clrRed;
