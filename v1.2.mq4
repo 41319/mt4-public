@@ -135,32 +135,6 @@ string CreateOrderComment()
 }
 
 //+------------------------------------------------------------------+
-//| Check if a potential price level is too close to existing orders |
-//+------------------------------------------------------------------+
-bool IsLevelTooClose(double potentialLevel, bool isLong)
-{
-   double gapThreshold = workingGapThresholdPoints * MarketInfo(Symbol(), MODE_POINT);
-   
-   for(int i = 0; i < OrdersTotal(); i++)
-   {
-      if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
-      {
-         double orderPrice = OrderOpenPrice();
-         
-         // For long levels, check distance to all existing orders
-         if(MathAbs(potentialLevel - orderPrice) < gapThreshold)
-         {
-            Print("Potential ", (isLong ? "long" : "short"), " level ", potentialLevel, 
-                  " is too close to existing order #", OrderTicket(), 
-                  " (", OrderTypeToString(OrderType()), ") at ", orderPrice);
-            return true;
-         }
-      }
-   }
-   return false;
-}
-
-//+------------------------------------------------------------------+
 //| Check if current price exceeds levels by gap threshold           |
 //+------------------------------------------------------------------+
 bool CheckPriceGap()
@@ -269,7 +243,7 @@ void ManageOrders()
             }
          }
 
-         if(!orderExists && !IsLevelTooClose(longPriceLevels[i], true) && PlaceOrder(i, true))
+         if(!orderExists && PlaceOrder(i, true))
             count++;
       }
    }
@@ -294,7 +268,7 @@ void ManageOrders()
             }
          }
 
-         if(!orderExists && !IsLevelTooClose(shortPriceLevels[i], false) && PlaceOrder(i, false))
+         if(!orderExists && PlaceOrder(i, false))
             count++;
       }
    }
@@ -324,8 +298,7 @@ void UpdatePriceLevels()
                bidPrice - (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
                digits);
 
-            if(!IsLevelTooClose(potentialLevel, true) && 
-               (bidPrice - potentialLevel) >= minDistanceFromPrice)
+            if((bidPrice - potentialLevel) >= minDistanceFromPrice)
             {
                 int size = ArraySize(longPriceLevels);
                 ArrayResize(longPriceLevels, size + 1);
@@ -343,8 +316,7 @@ void UpdatePriceLevels()
                askPrice + (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
                digits);
 
-            if(!IsLevelTooClose(potentialLevel, false) && 
-               (potentialLevel - askPrice) >= minDistanceFromPrice)
+            if((potentialLevel - askPrice) >= minDistanceFromPrice)
             {
                 int size = ArraySize(shortPriceLevels);
                 ArrayResize(shortPriceLevels, size + 1);
