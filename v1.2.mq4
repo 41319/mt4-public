@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Your Name"
 #property link      "https://www.yourwebsite.com"
-#property version   "1.38"
+#property version   "1.39"
 #property strict
 
 // Enumeration for trading modes
@@ -21,8 +21,7 @@ input double LotSize = 0.01;
 input int TrailingStopPoints = 30 * 10;      // Only activates in profit
 input int BreakevenTriggerPoints = 50 * 10;  // Profit level to activate stop
 input int MaxOrders = 10;
-input double PriceLevelAdjustment = 25 * 10;
-input bool UsePercentage = false;
+input double PriceLevelAdjustment = 25 * 10; // In points
 input int OrderExpirationHours = 24;         // Pending order expiration
 input double GapThresholdPoints = 26 * 10;   // Points above/below level to trigger recalculation
 input ENUM_TRADING_MODE TradingMode = MODE_MIXED; // Trading mode
@@ -148,7 +147,7 @@ void UpdateChartDisplay()
     CreateOrUpdateText("Display_Mode", "Trading Mode: " + modeStr, 5, 15, textColor, true);
     CreateOrUpdateText("Display_Gap", "Gap Threshold: " + DoubleToString(GapThresholdPoints, 1) + " pts", 5, 30, textColor, true);
     CreateOrUpdateText("Display_Expiry", "Order Expiry: " + IntegerToString(OrderExpirationHours) + " hours", 5, 45, textColor, true);
-    CreateOrUpdateText("Display_Adjust", "Price Adjustment: " + DoubleToString(PriceLevelAdjustment, 1) + (UsePercentage ? "%" : " pts"), 5, 60, textColor, true);
+    CreateOrUpdateText("Display_Adjust", "Price Adjustment: " + DoubleToString(PriceLevelAdjustment, 1) + " pts", 5, 60, textColor, true);
     CreateOrUpdateText("Display_MaxOrders", "Max Orders: " + IntegerToString(MaxOrders), 5, 75, textColor, true);
     CreateOrUpdateText("Display_BE", "Breakeven Trigger: " + IntegerToString(BreakevenTriggerPoints) + " pts", 5, 90, textColor, true);
     CreateOrUpdateText("Display_Trail", "Trailing Stop: " + IntegerToString(TrailingStopPoints) + " pts", 5, 105, textColor, true);
@@ -253,13 +252,12 @@ int CountOrders()
 //+------------------------------------------------------------------+
 string CreateOrderComment()
 {
-   string comment = StringFormat("HKIndex|Lots=%.2f|Trail=%d|BE=%d|Max=%d|Adj=%.1f|%s|Exp=%dh|Gap=%.1f|Mode=%d",
+   string comment = StringFormat("HKIndex|Lots=%.2f|Trail=%d|BE=%d|Max=%d|Adj=%.1f|Exp=%dh|Gap=%.1f|Mode=%d",
       LotSize,
       workingTrailingStopPoints,
       workingBreakevenTriggerPoints,
       MaxOrders,
       workingPriceLevelAdjustment,
-      UsePercentage ? "Pct" : "Pts",
       OrderExpirationHours,
       workingGapThresholdPoints,
       TradingMode);
@@ -460,17 +458,9 @@ void UpdatePriceLevels()
         ArrayResize(tempLongLevels, maxOrdersPerSide);
         for (int i = 0; i < maxOrdersPerSide; i++)
         {
-            double potentialLevel;
-            if (UsePercentage)
-            {
-                potentialLevel = bidPrice * (1 - (workingPriceLevelAdjustment / 100.0 * (i + 1)));
-            }
-            else
-            {
-                potentialLevel = NormalizeDouble(
-                   bidPrice - (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
-                   digits);
-            }
+            double potentialLevel = NormalizeDouble(
+               bidPrice - (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
+               digits);
 
             if (!IsLevelTooClose(potentialLevel, true))
             {
@@ -494,17 +484,9 @@ void UpdatePriceLevels()
         ArrayResize(tempShortLevels, maxOrdersPerSide);
         for (int i = 0; i < maxOrdersPerSide; i++)
         {
-            double potentialLevel;
-            if (UsePercentage)
-            {
-                potentialLevel = askPrice * (1 + (workingPriceLevelAdjustment / 100.0 * (i + 1)));
-            }
-            else
-            {
-                potentialLevel = NormalizeDouble(
-                   askPrice + (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
-                   digits);
-            }
+            double potentialLevel = NormalizeDouble(
+               askPrice + (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
+               digits);
 
             if (!IsLevelTooClose(potentialLevel, false))
             {
