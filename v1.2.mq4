@@ -487,7 +487,12 @@ void UpdateChartDisplay()
     color bgColor = (color)ChartGetInteger(0, CHART_COLOR_BACKGROUND);
     color textColor = (bgColor == clrBlack || bgColor == clrNavy) ? clrWhite : clrBlack;
 
-    CreateOrUpdateText("Display_Header", "--- HKIndex Settings ---", 5, 165, textColor, true);
+    // Get the point value for the current symbol
+    double pointValue = MarketInfo(Symbol(), MODE_POINT);
+    int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
+    
+    CreateOrUpdateText("Display_Header", "--- HKIndex Settings ---", 5, 180, textColor, true);
+    CreateOrUpdateText("Display_PointValue", "Point Value: " + DoubleToString(pointValue, digits), 5, 165, textColor, true);
     CreateOrUpdateText("Display_OpenOrders", "Open Orders: " + IntegerToString(openOrders), 5, 150, textColor, true);
     CreateOrUpdateText("Display_PendingOrders", "Pending Orders: " + IntegerToString(pendingOrders), 5, 135, textColor, true);
     CreateOrUpdateText("Display_LotSize", "Lot Size: " + DoubleToString(LotSize, 2), 5, 120, textColor, true);
