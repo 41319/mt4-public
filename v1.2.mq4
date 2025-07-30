@@ -464,7 +464,7 @@ void CheckForTrailingStop()
 }
 
 //+------------------------------------------------------------------+
-//| Update display with input variables                              |
+//| Update display with input variables and price levels             |
 //+------------------------------------------------------------------+
 void UpdateChartDisplay()
 {
@@ -486,23 +486,59 @@ void UpdateChartDisplay()
 
     color bgColor = (color)ChartGetInteger(0, CHART_COLOR_BACKGROUND);
     color textColor = (bgColor == clrBlack || bgColor == clrNavy) ? clrWhite : clrBlack;
+    color longColor = clrGreen;
+    color shortColor = clrRed;
 
     // Get the point value for the current symbol
     double pointValue = MarketInfo(Symbol(), MODE_POINT);
     int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
     
-    CreateOrUpdateText("Display_Header", "--- HKIndex Settings ---", 5, 180, textColor, true);
-    CreateOrUpdateText("Display_PointValue", "Point Value: " + DoubleToString(pointValue, digits), 5, 165, textColor, true);
-    CreateOrUpdateText("Display_OpenOrders", "Open Orders: " + IntegerToString(openOrders), 5, 150, textColor, true);
-    CreateOrUpdateText("Display_PendingOrders", "Pending Orders: " + IntegerToString(pendingOrders), 5, 135, textColor, true);
-    CreateOrUpdateText("Display_LotSize", "Lot Size: " + DoubleToString(LotSize, 2), 5, 120, textColor, true);
-    CreateOrUpdateText("Display_Trail", "Trailing Stop: " + IntegerToString(TrailingStopPoints) + " pts", 5, 105, textColor, true);
-    CreateOrUpdateText("Display_BE", "Breakeven Trigger: " + IntegerToString(BreakevenTriggerPoints) + " pts", 5, 90, textColor, true);
-    CreateOrUpdateText("Display_MaxOrders", "Max Orders: " + IntegerToString(MaxOrders), 5, 75, textColor, true);
-    CreateOrUpdateText("Display_Adjust", "Price Adjustment: " + DoubleToString(PriceLevelAdjustment, 1) + " pts", 5, 60, textColor, true);
-    CreateOrUpdateText("Display_Expiry", "Order Expiry: " + IntegerToString(OrderExpirationHours) + " hours", 5, 45, textColor, true);
-    CreateOrUpdateText("Display_Gap", "Gap Threshold: " + DoubleToString(GapThresholdPoints, 1) + " pts", 5, 30, textColor, true);
-    CreateOrUpdateText("Display_Mode", "Trading Mode: " + modeStr, 5, 15, textColor, true);
+    // Display settings
+    int yPos = 180;
+    CreateOrUpdateText("Display_Header", "--- HKIndex Settings ---", 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_PointValue", "Point Value: " + DoubleToString(pointValue, digits), 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_OpenOrders", "Open Orders: " + IntegerToString(openOrders), 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_PendingOrders", "Pending Orders: " + IntegerToString(pendingOrders), 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_LotSize", "Lot Size: " + DoubleToString(LotSize, 2), 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_Trail", "Trailing Stop: " + IntegerToString(TrailingStopPoints) + " pts", 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_BE", "Breakeven Trigger: " + IntegerToString(BreakevenTriggerPoints) + " pts", 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_MaxOrders", "Max Orders: " + IntegerToString(MaxOrders), 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_Adjust", "Price Adjustment: " + DoubleToString(PriceLevelAdjustment, 1) + " pts", 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_Expiry", "Order Expiry: " + IntegerToString(OrderExpirationHours) + " hours", 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_Gap", "Gap Threshold: " + DoubleToString(GapThresholdPoints, 1) + " pts", 5, yPos, textColor, true); yPos -= 15;
+    CreateOrUpdateText("Display_Mode", "Trading Mode: " + modeStr, 5, yPos, textColor, true); yPos -= 30;
+
+    // Display long price levels
+    if(TradingMode == MODE_LONG || TradingMode == MODE_MIXED)
+    {
+        CreateOrUpdateText("Display_LongHeader", "--- LONG Levels ---", 5, yPos, longColor, true); yPos -= 15;
+        
+        for(int i = 0; i < ArraySize(longPriceLevels); i++)
+        {
+            string levelText = StringFormat("L%d: %s", i+1, DoubleToString(longPriceLevels[i], digits));
+            CreateOrUpdateText("Display_LongLevel"+IntegerToString(i), levelText, 5, yPos, longColor, true);
+            yPos -= 15;
+            
+            if(yPos < 15) break; // Prevent going off the bottom of the chart
+        }
+        
+        yPos -= 15; // Extra space before shorts
+    }
+
+    // Display short price levels
+    if(TradingMode == MODE_SHORT || TradingMode == MODE_MIXED)
+    {
+        CreateOrUpdateText("Display_ShortHeader", "--- SHORT Levels ---", 5, yPos, shortColor, true); yPos -= 15;
+        
+        for(int i = 0; i < ArraySize(shortPriceLevels); i++)
+        {
+            string levelText = StringFormat("S%d: %s", i+1, DoubleToString(shortPriceLevels[i], digits));
+            CreateOrUpdateText("Display_ShortLevel"+IntegerToString(i), levelText, 5, yPos, shortColor, true);
+            yPos -= 15;
+            
+            if(yPos < 15) break; // Prevent going off the bottom of the chart
+        }
+    }
     
     ChartRedraw();
 }
