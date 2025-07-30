@@ -5,7 +5,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Your Name"
 #property link      "https://www.yourwebsite.com"
-#property version   "1.37"
+#property version   "1.38"
 #property strict
 
 // Enumeration for trading modes
@@ -443,7 +443,8 @@ void ManageOrders()
 //+------------------------------------------------------------------+
 void UpdatePriceLevels()
 {
-    double currentPrice = MarketInfo(Symbol(), MODE_BID);
+    double bidPrice = MarketInfo(Symbol(), MODE_BID);
+    double askPrice = MarketInfo(Symbol(), MODE_ASK);
     int maxOrdersPerSide = (int)MathFloor(MaxOrders / (TradingMode == MODE_MIXED ? 2.0 : 1.0));
     int digits = (int)MarketInfo(Symbol(), MODE_DIGITS);
 
@@ -453,7 +454,7 @@ void UpdatePriceLevels()
     int longCount = 0;
     int shortCount = 0;
 
-    // --- Generate and Filter Long Levels ---
+    // --- Generate and Filter Long Levels (based on BID) ---
     if (TradingMode == MODE_LONG || TradingMode == MODE_MIXED)
     {
         ArrayResize(tempLongLevels, maxOrdersPerSide);
@@ -462,12 +463,12 @@ void UpdatePriceLevels()
             double potentialLevel;
             if (UsePercentage)
             {
-                potentialLevel = currentPrice * (1 - (workingPriceLevelAdjustment / 100.0 * (i + 1)));
+                potentialLevel = bidPrice * (1 - (workingPriceLevelAdjustment / 100.0 * (i + 1)));
             }
             else
             {
                 potentialLevel = NormalizeDouble(
-                   currentPrice - (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
+                   bidPrice - (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
                    digits);
             }
 
@@ -487,7 +488,7 @@ void UpdatePriceLevels()
         for(int i=0; i<longCount; i++) Print("Long Price Level ", i+1, ": ", longPriceLevels[i]);
     }
 
-    // --- Generate and Filter Short Levels ---
+    // --- Generate and Filter Short Levels (based on ASK) ---
     if (TradingMode == MODE_SHORT || TradingMode == MODE_MIXED)
     {
         ArrayResize(tempShortLevels, maxOrdersPerSide);
@@ -496,12 +497,12 @@ void UpdatePriceLevels()
             double potentialLevel;
             if (UsePercentage)
             {
-                potentialLevel = currentPrice * (1 + (workingPriceLevelAdjustment / 100.0 * (i + 1)));
+                potentialLevel = askPrice * (1 + (workingPriceLevelAdjustment / 100.0 * (i + 1)));
             }
             else
             {
                 potentialLevel = NormalizeDouble(
-                   currentPrice + (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
+                   askPrice + (workingPriceLevelAdjustment * (i + 1) * MarketInfo(Symbol(), MODE_POINT)),
                    digits);
             }
 
