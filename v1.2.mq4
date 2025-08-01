@@ -140,7 +140,7 @@ string CreateOrderComment()
 bool CheckPriceGap()
 {
    static datetime lastGapCheckTime = 0;
-   if(TimeCurrent() - lastGapCheckTime < 60) return false; // Only check once per hour
+
    lastGapCheckTime = TimeCurrent();
    
    double currentPrice = MarketInfo(Symbol(), MODE_BID);
