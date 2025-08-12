@@ -101,6 +101,18 @@ void OnTick()
 }
 
 //+------------------------------------------------------------------+
+//| Check if order has TP and should be protected                    |
+//+------------------------------------------------------------------+
+bool IsOrderProtected(int ticket)
+{
+   if(OrderSelect(ticket, SELECT_BY_TICKET))
+   {
+      return (OrderTakeProfit() != 0);
+   }
+   return false;
+}
+
+//+------------------------------------------------------------------+
 //| Count open and pending orders for the current symbol             |
 //+------------------------------------------------------------------+
 int CountOrders()
@@ -407,6 +419,13 @@ void CheckForTrailingStop()
    {
       if(OrderSelect(i, SELECT_BY_POS, MODE_TRADES) && OrderSymbol() == Symbol())
       {
+         // Skip protected orders (those with TP set)
+         if(IsOrderProtected(OrderTicket()))
+         {
+            Print("Order #", OrderTicket(), " has TP set. Skipping modification.");
+            continue;
+         }
+         
          bool isModified = false;
          if(OrderType() == OP_BUY && (TradingMode == MODE_LONG || TradingMode == MODE_MIXED))
          {
@@ -419,7 +438,7 @@ void CheckForTrailingStop()
                
                if(currentStop == 0 || newStop > currentStop)
                {
-                  if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, 0, 0, clrNONE))
+                  if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, OrderTakeProfit(), 0, clrNONE))
                      Print("Failed to modify stop. Error: ", GetLastError());
                   else
                      isModified = true;
@@ -437,7 +456,7 @@ void CheckForTrailingStop()
                
                if(currentStop == 0 || newStop < currentStop)
                {
-                  if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, 0, 0, clrNONE))
+                  if(!OrderModify(OrderTicket(), OrderOpenPrice(), newStop, OrderTakeProfit(), 0, clrNONE))
                      Print("Failed to modify stop. Error: ", GetLastError());
                   else
                      isModified = true;
